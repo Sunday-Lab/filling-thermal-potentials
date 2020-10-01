@@ -5,6 +5,7 @@ library(sf)
 library(raster)
 library(ncdf4)
 library(rnaturalearth)
+library(smoothr)
 select <- dplyr::select
 
 
@@ -59,16 +60,16 @@ r = raster(nrow = nrow(lat), ncol = nrow(lon),
            crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
 raster_high <- rasterize(high_tmp[, 1:2], r, high_tmp[,3], fun=mean)
 names(raster_high) <- "seasonal_high"
-plot(raster_high)
+plot(raster_high, asp = 1)
 
 raster_low <- rasterize(low_tmp[, 1:2], r, low_tmp[,3], fun=mean)
 names(raster_low) <- "seasonal_low"
-plot(raster_low)
+plot(raster_low, asp = 1)
 
 
 ## separate ocean data from land data
 countries <- ne_countries(returnclass = "sp") 
-projection(countries) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0")
+countries <- spTransform(countries, "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0")
 land_high_tmp <- crop(raster_high, extent(countries)) %>%
   mask(., countries)
 ocean_high_tmp <- crop(raster_high, extent(countries)) %>%
@@ -93,55 +94,124 @@ plot(land_low_tmp)
 #####                   CREATING POTENTIAL RANGE SHAPEFILES                   ######
 ####################################################################################
 
-##### TERRESTRIAL #####  ???
+## filter thermal limits to include only species we have realized ranges for 
 
-## read in thermal limit data for each species 
-thermal_limits <- read_csv("./data-raw/globtherm_full_dataset_2019.csv")
+
+##### TERRESTRIAL ##### 
+## repeat for marine species after 
+## read in thermal limit data for each species that has both thermal tolerance metrics 
+
+thermal_limits <- read_csv("./data-raw/globtherm_full_dataset_2019.csv") %>%
+  filter(thermy == "ectotherm")
+
 upper_limits <- thermal_limits %>%
-  filter(type == "max")
+  filter(type == "max") %>%
+  filter(realm == "Terrestrial")
 
 lower_limits <- thermal_limits %>%
-  filter(type == "min")
+  filter(type == "min") %>%
+  filter(realm == "Terrestrial")
 
-names_high <- c("seasonal_high", paste(upper_limits$Genus, upper_limits$Species, sep = "_"))
-names_low <- c("seasonal_low", paste(lower_limits$Genus, lower_limits$Species, sep = "_"))
+both_upper <- upper_limits[upper_limits$genus_species %in% lower_limits$genus_species,]
+both_lower <- lower_limits[lower_limits$genus_species %in% upper_limits$genus_species,]
+
+names_high <- c("seasonal_high", paste(both_upper$Genus, both_upper$Species, sep = "_"))
+names_low <- c("seasonal_low", paste(both_lower$Genus, both_lower$Species, sep = "_"))
 
 ## create an individual raster layer of difference between thermal limit and seasonal temperature for each species 
 species = 1
-while (species < nrow(upper_limits) + 1) {
-  raster_high <- addLayer(raster_high, raster_high[[1]] - upper_limits$thermal_limit[species]) 
+while (species < nrow(both_upper) + 1) {
+  land_high_tmp <- addLayer(land_high_tmp, land_high_tmp[[1]] - both_upper$thermal_limit[species]) 
 
   species = species + 1
 }
-names(raster_high) <- names_high
-plot(raster_high)
+names(land_high_tmp) <- names_high
+plot(land_high_tmp)
 
 species = 1
-while (species < nrow(lower_limits) + 1) {
-  raster_low <- addLayer(raster_low, raster_low[[1]] - lower_limits$thermal_limit[species]) 
+while (species < nrow(both_lower) + 1) {
+  land_low_tmp <- addLayer(land_low_tmp, land_low_tmp[[1]] - both_lower$thermal_limit[species]) 
   
   species = species + 1
 }
-names(raster_low) <- names_low
-plot(raster_low)
+names(land_low_tmp) <- names_low
+plot(land_low_tmp)
 
 
 ## exclude raster cells outside of the thermal tolerance (where seasonal_high - Tmax < 0 and where seasonal_low - Tmin < 0)
-raster_high[raster_high > 0] <- NA
-raster_low[raster_low < 0] <- NA
+land_high_tmp[land_high_tmp > 0] <- NA
+land_low_tmp[land_low_tmp < 0] <- NA
 
-plot(raster_high)
-plot(raster_low)
-
-
+plot(land_high_tmp)
+plot(land_low_tmp)
 
 
+## combine: 
+combined <- land_high_tmp[[1]]
+i = 2  
+while (i < nrow(both_upper) + 1) {
+  combined <- addLayer(combined, mask(land_high_tmp[[i]], land_low_tmp[[i]]))
+  
+  i = i + 1
+}
+
+combinedtest <- combined[[-1]]
+plot(combinedtest)
+
+copy <- combinedtest
+copy[copy < 0] = 1 
+
+plot(copy[[11]], axes = TRUE) 
+
+polygon <- copy[[11]] %>%
+  rasterToPolygons(., dissolve = TRUE) %>% 
+  st_as_sf()
+smooth <- smooth(polygon, method = "ksmooth", smoothness = 2) 
+
+st_crs(smooth) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0")
+
+plot(smooth, axes = TRUE) 
+
+upper <- st_crop(smooth, xmin = -180, xmax = 180, ymin = 10, ymax = 85)
+
+ <- st_crop(smooth, xmin = -180, xmax = 180, ymax = 10, ymin = -90)
+
+plot(upper, axes = TRUE) 
+plot(lower, axes = TRUE) 
+
+upper_raster <- land_high_tmp[[12]]
+upper_raster[upper_raster < 0] = 1 
+upper_raster <- crop(upper_raster, y = c(-180, 180, -30, 15))
+
+lower_raster <- copy[[11]]
+lower_raster <- crop(lower_raster, y = c(-180, 180, -90, -30))
+
+
+plot(upper_raster)
+
+
+
+
+####################################################################################
+#####                            REALIZED RANGE POLYGONS                      ######
+####################################################################################
+library(tmap)
+polygons <- st_read("data-raw/polygons/Filtered occurences ectotherm animals_020817.shp")
+
+
+head(polygons)
+qtm(polygons)
 
 
 
 
 
 
+## looking at how complete traits are:
+traits <- read_csv("data-raw/globtherm_traits_collated_180617.csv") %>%
+  mutate(genus_species = paste(.$Genus, .$Species, sep = "_"))
+
+traits <- traits[traits$genus_species %in% thermal_limits$genus_species,]
 
 
 
