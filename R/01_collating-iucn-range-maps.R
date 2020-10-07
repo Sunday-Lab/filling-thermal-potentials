@@ -5,7 +5,7 @@ library(sf)
 library(rnaturalearth)
 library(latticeExtra)
 
-thermal_limits <- read_csv("./data-raw/globtherm_full_dataset_2019.csv") %>%
+thermal_limits <- read_csv("data-raw/globtherm_full_dataset_2019.csv") %>%
   filter(thermy == "ectotherm")
 
 
@@ -82,32 +82,29 @@ wrasses_overlap <- wrasses_all %>%
 rm(wrasses_all,wrasses)
 
 
-combined <- rbind(amphibs_overlap, blennies_overlap, clups_overlap, puff_overlap, reptiles_overlap, seabream_overlap, sharks_overlap, wrasses_overlap) 
+## combine and filter out non-resident ranges:
+combined <- rbind(amphibs_overlap, blennies_overlap, clups_overlap, puff_overlap, 
+                  reptiles_overlap, seabream_overlap, sharks_overlap, wrasses_overlap) %>%
+  filter(legend == "Extant (resident)")
+
+## collect same ID number (species) into one MULTIPOLYGON:
+combined <- aggregate(combined, list(combined$id_no), function(x) x[1])
 
 
 ## write out to file:
 st_write(combined, "/Volumes/ADATA HV620/IUCN/FILTERED/IUCN-ectotherms.shp", driver = "ESRI Shapefile")
 
-
-
-
-
-
-
 ##############################################################
 ## plot one:
-one_amphib <- filter(combine, binomial == "Hylarana erythraea")
+one_amphib <- filter(combined, binomial == "Eurycea bislineata")
 plot(st_geometry(one_amphib))
-
 
 crs(one_amphib)
 
-## transform it:
-
+## transform it to the correct projection:
 one_amphib <- st_transform(one_amphib, crs = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
 plot(st_geometry(one_amphib))
 crs(one_amphib)
-
 
 countries <- ne_countries(returnclass = "sf") 
 countries <- st_transform(countries, "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0")
@@ -115,5 +112,89 @@ countries <- st_transform(countries, "+proj=longlat +ellps=WGS84 +datum=WGS84 +n
 plot(st_geometry(countries))
 plot(st_geometry(one_amphib), add = TRUE, col = "red")
 
-ggplot(data = world) +
-  geom_sf()
+
+
+
+
+#########################################################################################
+## figuring out how many range maps we have (IUCN + GBIF) and how many cross the equator 
+IUCN <- st_read("/Volumes/ADATA HV620/IUCN/FILTERED/IUCN-ectotherms.shp") %>%
+  select(binomial, geometry) %>%
+  rename(species = binomial) 
+GBIF <- st_read("/Volumes/ADATA HV620/polygons/Filtered occurences ectotherm animals_020817.shp")
+GBIF <- GBIF[GBIF$species %in% thermal_species, ] ## get rid of species not in thermal ectotherm data
+
+st_crs(IUCN)
+st_crs(GBIF)
+
+## combine:
+realized_ranges <- rbind(IUCN, GBIF) ## okay, we have 524 ectotherm ranges 
+length(unique(realized_ranges$species)) ## 439 unique species 
+
+## create sf that represents the equator (a line)
+equator <- st_linestring(rbind(c(-180, 0), c(180, 0)))
+plot(st_geometry(equator))
+
+## test equator crossing check:
+one_species <- filter(IUCN, species == "Hylarana erythraea")
+equator_check <- st_intersects(one_species, equator, sparse = FALSE)[,] ## should return TRUE
+another_species <- filter(IUCN, species == "Eurycea bislineata")
+equator_check <- st_intersects(another_species, equator, sparse = FALSE)[,] ## should return FALSE
+
+both_species <- rbind(one_species, another_species) 
+equator_check <- st_intersects(both_species, equator, sparse = FALSE)[,] ## should return TRUE, FALSE
+
+## yay! it works
+
+
+
+## see which ranges intersect the equator:
+equator_check <- st_intersects(realized_ranges, equator, sparse = FALSE)[,]
+crosses_equator <- filter(realized_ranges, equator_check == TRUE)
+
+## see which remaining ranges have Northern and Southern parts
+does_not <- filter(realized_ranges, equator_check == FALSE)
+pts <- matrix(c(-180,-90,-180,90,180,90,180,-90,-180,-90),ncol=2, byrow=TRUE)
+pts_n <- matrix(c(-180,0,-180,90,180,90,180,0,-180,0),ncol=2, byrow=TRUE)
+pts_s <- matrix(c(-180,-90,-180,0,180,0,180,-90,-180,-90),ncol=2, byrow=TRUE)
+both <- st_polygon(list(pts))
+n_hemi <- st_polygon(list(pts_n))
+s_hemi <- st_polygon(list(pts_s))
+plot(both)
+plot(n_hemi, add = TRUE)
+plot(s_hemi, add = TRUE, col = "red")
+
+in_north <- st_intersects(does_not, n_hemi, sparse = FALSE)[,]
+in_south <- st_intersects(does_not, s_hemi, sparse = FALSE)[,]
+
+in_both <- filter(does_not, in_north == TRUE & in_south == TRUE)
+## only one in the north and south 
+
+plot(st_geometry(countries))
+plot(st_geometry(equator), add = TRUE)
+plot(st_geometry(in_both)[1], add = TRUE, col = "red") 
+
+
+## write out pngs of the ranges that cross the equator
+i = 1
+while (i < length(crosses_equator$species) + 1) {
+  
+  graphics.off()
+  plot(st_geometry(countries), main = crosses_equator$species[i])
+  plot(st_geometry(crosses_equator)[i], add = TRUE, col = "red")
+  plot(st_geometry(equator), add = TRUE, col = "blue")
+  
+  dev.copy(png, filename=paste("data-processed/equator-crossers/", crosses_equator$species[i], ".png", sep = ""), width = 1000, height = 600);
+  dev.off ();
+  
+  i = i + 1
+}
+
+
+
+## write new thermal limits database with only species that we have ranges for 
+thermal_limits_new <- thermal_limits[paste(thermal_limits$Genus, thermal_limits$Species, sep = " ") %in% realized_ranges$species,]
+
+length(unique(thermal_limits_new$genus_species))
+
+write.csv(thermal_limits_new, "data-processed/thermal-limits_ectotherms-with-ranges.csv", row.names = FALSE)

@@ -207,11 +207,7 @@ qtm(polygons)
 
 
 
-## looking at how complete traits are:
-traits <- read_csv("data-raw/globtherm_traits_collated_180617.csv") %>%
-  mutate(genus_species = paste(.$Genus, .$Species, sep = "_"))
 
-traits <- traits[traits$genus_species %in% thermal_limits$genus_species,]
 
 
 
