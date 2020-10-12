@@ -155,39 +155,69 @@ while (i < nrow(both_upper) + 1) {
   i = i + 1
 }
 
-combinedtest <- combined[[-1]]
-plot(combinedtest)
-
-copy <- combinedtest
-copy[copy < 0] = 1 
-
-plot(copy[[11]], axes = TRUE) 
-
-polygon <- copy[[11]] %>%
-  rasterToPolygons(., dissolve = TRUE) %>% 
-  st_as_sf()
-smooth <- smooth(polygon, method = "ksmooth", smoothness = 2) 
-
-st_crs(smooth) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0")
-
-plot(smooth, axes = TRUE) 
-
-upper <- st_crop(smooth, xmin = -180, xmax = 180, ymin = 10, ymax = 85)
-
- <- st_crop(smooth, xmin = -180, xmax = 180, ymax = 10, ymin = -90)
-
-plot(upper, axes = TRUE) 
-plot(lower, axes = TRUE) 
-
-upper_raster <- land_high_tmp[[12]]
-upper_raster[upper_raster < 0] = 1 
-upper_raster <- crop(upper_raster, y = c(-180, 180, -30, 15))
-
-lower_raster <- copy[[11]]
-lower_raster <- crop(lower_raster, y = c(-180, 180, -90, -30))
+combined <- combined[[-1]]
+plot(combined)
 
 
-plot(upper_raster)
+
+##### MARINE ##### 
+upper_limits <- thermal_limits %>%
+  filter(type == "max") %>%
+  filter(realm == "Marine")
+
+lower_limits <- thermal_limits %>%
+  filter(type == "min") %>%
+  filter(realm == "Marine")
+
+both_upper <- upper_limits[upper_limits$genus_species %in% lower_limits$genus_species,]
+both_lower <- lower_limits[lower_limits$genus_species %in% upper_limits$genus_species,]
+
+names_high <- c("seasonal_high", paste(both_upper$Genus, both_upper$Species, sep = "_"))
+names_low <- c("seasonal_low", paste(both_lower$Genus, both_lower$Species, sep = "_"))
+
+## create an individual raster layer of difference between thermal limit and seasonal temperature for each species 
+species = 1
+while (species < nrow(both_upper) + 1) {
+  ocean_high_tmp <- addLayer(ocean_high_tmp, ocean_high_tmp[[1]] - both_upper$thermal_limit[species]) 
+  
+  species = species + 1
+}
+names(ocean_high_tmp) <- names_high
+plot(ocean_high_tmp)
+
+species = 1
+while (species < nrow(both_lower) + 1) {
+  ocean_low_tmp <- addLayer(ocean_low_tmp, ocean_low_tmp[[1]] - both_lower$thermal_limit[species]) 
+  
+  species = species + 1
+}
+names(ocean_low_tmp) <- names_low
+plot(ocean_low_tmp)
+
+
+## exclude raster cells outside of the thermal tolerance (where seasonal_high - Tmax < 0 and where seasonal_low - Tmin < 0)
+ocean_high_tmp[ocean_high_tmp > 0] <- NA
+ocean_low_tmp[ocean_low_tmp < 0] <- NA
+
+plot(ocean_high_tmp)
+plot(ocean_low_tmp)
+
+
+## combine: 
+combined <- ocean_high_tmp[[1]]
+i = 2  
+while (i < nrow(both_upper) + 1) {
+  combined <- addLayer(combined, mask(ocean_high_tmp[[i]], ocean_low_tmp[[i]]))
+  
+  i = i + 1
+}
+
+combined <- combined[[-1]]
+plot(combined)
+
+
+plot(combined$Oncorhynchus_tshawytscha)
+
 
 
 
@@ -250,3 +280,40 @@ map_df <- map_df %>%
 land <- subset(map_df, is_land == TRUE) 
 ocean <-  subset(map_df, is_land == FALSE) 
 
+
+
+
+## raster to polygon code:
+combinedtest <- combined[[-1]]
+plot(combinedtest)
+
+copy <- combinedtest
+copy[copy < 0] = 1 
+
+plot(copy[[11]], axes = TRUE) 
+
+polygon <- copy[[11]] %>%
+  rasterToPolygons(., dissolve = TRUE) %>% 
+  st_as_sf()
+smooth <- smooth(polygon, method = "ksmooth", smoothness = 2) 
+
+st_crs(smooth) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0")
+
+plot(smooth, axes = TRUE) 
+
+upper <- st_crop(smooth, xmin = -180, xmax = 180, ymin = 10, ymax = 85)
+
+<- st_crop(smooth, xmin = -180, xmax = 180, ymax = 10, ymin = -90)
+
+plot(upper, axes = TRUE) 
+plot(lower, axes = TRUE) 
+
+upper_raster <- land_high_tmp[[12]]
+upper_raster[upper_raster < 0] = 1 
+upper_raster <- crop(upper_raster, y = c(-180, 180, -30, 15))
+
+lower_raster <- copy[[11]]
+lower_raster <- crop(lower_raster, y = c(-180, 180, -90, -30))
+
+
+plot(upper_raster)

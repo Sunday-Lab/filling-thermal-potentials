@@ -84,8 +84,9 @@ rm(wrasses_all,wrasses)
 
 ## combine and filter out non-resident ranges:
 combined <- rbind(amphibs_overlap, blennies_overlap, clups_overlap, puff_overlap, 
-                  reptiles_overlap, seabream_overlap, sharks_overlap, wrasses_overlap) %>%
-  filter(legend == "Extant (resident)")
+                   reptiles_overlap, seabream_overlap, sharks_overlap, wrasses_overlap) 
+#%>%
+  # filter(legend == "Extant (resident)")
 
 ## collect same ID number (species) into one MULTIPOLYGON:
 combined <- aggregate(combined, list(combined$id_no), function(x) x[1])
@@ -192,9 +193,90 @@ while (i < length(crosses_equator$species) + 1) {
 
 
 
+
 ## write new thermal limits database with only species that we have ranges for 
 thermal_limits_new <- thermal_limits[paste(thermal_limits$Genus, thermal_limits$Species, sep = " ") %in% realized_ranges$species,]
 
 length(unique(thermal_limits_new$genus_species))
 
 write.csv(thermal_limits_new, "data-processed/thermal-limits_ectotherms-with-ranges.csv", row.names = FALSE)
+
+
+
+
+
+
+## look at species with ranges in IUCN and made by Greta
+## all 85 are squamata 
+duplicated <- IUCN$species[which(IUCN$species %in% GBIF$species)]
+
+duplicate <- filter(realized_ranges, species == as.character(duplicated[1]))
+plot(st_geometry(duplicate)[2], col = "blue", main = as.character(duplicated[1]))
+plot(st_geometry(duplicate)[1], add = TRUE, col = "red") 
+plot(st_geometry(countries), add = TRUE)
+legend(st_bbox(duplicate)$xmin-5, st_bbox(duplicate)$ymin+2, legend=c("GBIF", "IUCN"),
+       col=c("blue", "red"),  lty=1:2, cex=0.8)
+
+duplicate <- filter(realized_ranges, species == as.character(duplicated[2]))
+plot(st_geometry(duplicate)[2], col = "blue", main = as.character(duplicated[2]))
+plot(st_geometry(duplicate)[1], add = TRUE, col = "red") 
+plot(st_geometry(countries), add = TRUE)
+legend(st_bbox(duplicate)$xmin-5, st_bbox(duplicate)$ymin+10, legend=c("GBIF", "IUCN"),
+       col=c("blue", "red"),  lty=1:2, cex=0.8)
+
+duplicate <- filter(realized_ranges, species == as.character(duplicated[3]))
+plot(st_geometry(duplicate)[2], col = "blue", main = as.character(duplicated[3]))
+plot(st_geometry(duplicate)[1], add = TRUE, col = "red") 
+plot(st_geometry(countries), add = TRUE)
+legend(st_bbox(duplicate)$xmin+8, st_bbox(duplicate)$ymin+9, legend=c("GBIF", "IUCN"),
+       col=c("blue", "red"),  lty=1:2, cex=0.8)
+
+duplicate <- filter(realized_ranges, species == as.character(duplicated[4]))
+plot(st_geometry(duplicate)[2], col = "blue", main = as.character(duplicated[4]))
+plot(st_geometry(duplicate)[1], add = TRUE, col = "red") 
+plot(st_geometry(countries), add = TRUE)
+legend(st_bbox(duplicate)$xmin+28, st_bbox(duplicate)$ymin+22, legend=c("GBIF", "IUCN"),
+       col=c("blue", "red"),  lty=1:2, cex=0.8)
+
+
+## see how different IUCN ranges are from Greta's polygons:
+i = 1 
+props <- data.frame(matrix(nrow = 0, ncol = 4))
+colnames(props) <- c("species", "IUCN_filled", "overlap", "GBIF_filled")
+
+while(i < length(duplicated) + 1) {
+  duplicate <- filter(realized_ranges, species == as.character(duplicated[i]))
+  IUCNrange <- as_Spatial(st_geometry(duplicate)[1])
+  GBIFrange <- as_Spatial(st_geometry(duplicate)[2])
+  
+  overlap <- intersect(GBIFrange, IUCNrange)
+  overlap <- area(overlap) / 10000000
+  
+  leftover_IUCN <- (area(IUCNrange)/10000000) - overlap 
+  leftover_GBIF <-  (area(GBIFrange)/10000000) - overlap 
+  row <- data.frame(species = as.character(duplicated[i]), 
+                    IUCN_filled = leftover_IUCN, overlap = overlap, GBIF_filled = leftover_GBIF)
+  props <- rbind(props, row)
+  
+  i = i + 1
+}
+
+props <- gather(props, "leftover_type", "area", -species)
+props$leftover_type <- factor(props$leftover_type, levels = c("GBIF_filled", "overlap", "IUCN_filled"))
+
+ggplot(props, aes(fill = leftover_type, y = area, x=reorder(species, -area))) + 
+  geom_bar(position="stack", stat="identity") +
+  coord_flip() +
+  labs(y = "Area (km^2)", x = "Species", fill = "") +
+  scale_fill_manual(values = c("purple4", "forestgreen", "orange"), labels=c("GBIF range not in IUCN range","Overlap between ranges","IUCN range not in GBIF range"))
+
+ggsave(device = "png", filename = "figures/IUCN-GBIF-range-overlap.png")
+
+## make plot to explain what overlaps mean:
+plot(IUCNrange, col = "orange")
+plot(GBIFrange, add = TRUE, col = "purple4")
+plot(overlap, add = TRUE, col = "forestgreen")
+plot(st_geometry(countries), add = TRUE)
+
+dev.copy(png, filename = "figures/IUCN-GBIF-range-overlap_example.png", width = 1000, height = 600);
+dev.off()
