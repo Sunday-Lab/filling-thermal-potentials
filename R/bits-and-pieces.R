@@ -65,3 +65,79 @@ summary <- ggplot(na, aes(x = reorder(column, -na_count), y = na_count, fill = "
   labs(y = "Trait", x = "Number of values missing")
 
 ggsave(summary, filename = "figures/traits_completeness-summary.png", device = "png")
+
+
+
+## plotting expectations of model results:
+df <- data.frame()
+ggplot(df) + geom_point() + ylim(0, 2) +
+  labs(x = "|Latitudinal midpoint|", y = "Range filling") +
+  scale_x_continuous(breaks = c(0,30,60,90), labels = c("0°","30°", "60°", "90°"), limits = c(0,91))
+
+ggsave(filename = "figures/expectations_latitudinal-midpoint.png", device = "png", height = 2, width = 3, units = "in")
+
+
+ggplot(df) + geom_point() + ylim(0, 2) +
+  labs(x = "Habitat type", y = "Range filling") +
+scale_x_continuous(breaks = c(0,30,60,90, 120), labels = c("Marine", "Coastal", "Intertidal", "Terrestrial", "Freshwater"), limits = c(0,121))
+
+ggsave(filename = "figures/expectations_habitat-type.png", device = "png", height = 2, width = 3, units = "in")
+
+ggplot(df) + geom_point() + ylim(0, 2) +
+  labs(x = "Range size (km2)", y = "Range filling") +
+  scale_x_continuous(breaks = waiver(), limits = c(0,1000000))
+
+ggsave(filename = "figures/expectations_range-size.png", device = "png", height = 2, width = 3, units = "in")
+
+ggplot(df) + geom_point() + ylim(0, 2) +
+  labs(x = "Trophic position", y = "Range filling") +
+  scale_x_continuous(breaks = c(0,30,60,90, 120), labels = c("Primary \n producer", "Herbivore", "Insectivore", "Omnivore", "Carnivore"), limits = c(0,121))
+
+ggsave(filename = "figures/expectations_trophic-position.png", device = "png", height = 2, width = 3.5, units = "in")
+
+ggplot(df) + geom_point() + ylim(0, 2) +
+  labs(x = "Body size (cm)", y = "Range filling") +
+  scale_x_continuous(breaks = waiver(), limits = c(0,580))
+
+ggsave(filename = "figures/expectations_body-size.png", device = "png", height = 2, width = 3, units = "in")
+
+
+ggplot(df) + geom_point() + ylim(0, 2) +
+  labs(x = "Dispersal distance category", y = "Range filling") +
+  scale_x_continuous(breaks = c(0,30,60), labels = c("0-1 km", "1-10 km", "10+ km"), limits = c(0,61))
+
+ggsave(filename = "figures/expectations_dispersal-distance.png", device = "png", height = 2, width = 3, units = "in")
+
+
+ggplot(df) + geom_point() + ylim(0, 2) +
+  labs(x = "Dispersal type category", y = "Range filling") +
+  scale_x_continuous(breaks = c(0,40,80,120,160,200), labels = c("walking", "flying", "non-pelagic \n development \n and sessile adults", "non-pelagic \n development \n and crawling adults", "non-pelagic \n development \n and swimming adults", "pelagic \n  development"), limits = c(0,210))
+
+ggsave(filename = "figures/expectations_dispersal-ability.png", device = "png", height = 3, width = 7, units = "in")
+
+
+ggplot(df) + geom_point() + ylim(0, 2) +
+  labs(x = "Warm season dormancy", y = "Range filling") +
+  scale_x_continuous(breaks = c(20, 55), labels = c("Y", "N"), limits = c(0,75))
+
+ggsave(filename = "figures/expectations_warm-season-dormancy.png", device = "png", height = 2, width = 3, units = "in")
+
+ggplot(df) + geom_point() + ylim(0, 2) +
+  labs(x = "Cold season dormancy", y = "Range filling") +
+  scale_x_continuous(breaks = c(20, 55), labels = c("Y", "N"), limits = c(0,75))
+
+ggsave(filename = "figures/expectations_cold-season-dormancy.png", device = "png", height = 2, width = 3, units = "in")
+
+ggplot(df) + geom_point() + ylim(0, 2) +
+  labs(x = "Migratory", y = "Range filling") +
+  scale_x_continuous(breaks = c(20, 55), labels = c("Y", "N"), limits = c(0,75))
+
+ggsave(filename = "figures/expectations_migratory.png", device = "png", height = 2, width = 3, units = "in")
+
+
+ggplot(df) + geom_point() + ylim(0, 2) +
+  labs(x = "Acclimation response ratio", y = "Range filling") +
+  scale_x_continuous(breaks = waiver(), limits = c(0,1.5))
+
+ggsave(filename = "figures/expectations_range-size.png", device = "png", height = 2, width = 3, units = "in")
+
