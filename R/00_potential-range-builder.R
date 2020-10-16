@@ -12,78 +12,26 @@ select <- dplyr::select
 ####################################################################################
 #####                       SEASONAL TEMPERATURE RASTERS                      ######
 ####################################################################################
+## read in seasonal high and low temp data:
+terr_seasonal_high <- read.csv("data-processed/terrestrial_seasonal-max-temps.csv")
+terr_seasonal_low <- read.csv("data-processed/terrestrial_seasonal-min-temps.csv")
 
-absolute <- nc_open("data-raw/absolute.nc")
+## rasterize:
+r <- raster(xmn=min(long), xmx=max(long), ymn=min(lat), ymx=max(lat), 
+            crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
 
-lat = ncvar_get(absolute, "lat")
-lon = ncvar_get(absolute, "lon")
-time = ncvar_get(absolute, "time")
-temps = ncvar_get(absolute, "tem")
+raster_terr_high <- rasterize(terr_seasonal_high[, 1:2], r, terr_seasonal_high[,3], fun=mean)
+names(raster_terr_high) <- "seasonal_high_temp"
+plot(raster_terr_high, asp = 1)
 
-nc_close(absolute)
-
-## save rasters of each month
-raster <- raster(xmn=min(lon), xmx=max(lon), ymn=min(lat), ymx=max(lat), 
-                 crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
-x = 1 
-while (x  < 13) {
-  slice <- temps[ , , x] 
-  
-  r <- raster(t(slice), xmn=min(lon), xmx=max(lon), ymn=min(lat), ymx=max(lat), 
-              crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
-  
-  raster <- addLayer(raster, r) 
-  x = x+1
-}
-
-names(raster) <- c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
-
-## collapse into data frame where each row is a raster square 
-tmp <- data.frame(rasterToPoints(raster)) 
+raster_terr_low <- rasterize(terr_seasonal_low[, 1:2], r, terr_seasonal_low[,3], fun=mean)
+names(raster_terr_low) <- "seasonal_low_temp"
+plot(raster_terr_low, asp = 1)
 
 
-## mean high temperature from the warmest month
-high_tmp <- tmp %>%
-  mutate(seasonal_high = pmax(.$January, .$February, .$March, .$April, .$May, 
-                              .$June, .$July, .$August, .$September, .$October, .$November, .$December)) %>%
-  select(x, y, seasonal_high) 
 
 
-## mean low temperature from the coldest month 
-low_tmp <- tmp %>%
-  mutate(seasonal_low = pmin(.$January, .$February, .$March, .$April, .$May, 
-                             .$June, .$July, .$August, .$September, .$October, .$November, .$December)) %>%
-  select(x, y, seasonal_low)
 
-## create raster layers of high and low seasonal temperature
-r = raster(nrow = nrow(lat), ncol = nrow(lon),
-           crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
-raster_high <- rasterize(high_tmp[, 1:2], r, high_tmp[,3], fun=mean)
-names(raster_high) <- "seasonal_high"
-plot(raster_high, asp = 1)
-
-raster_low <- rasterize(low_tmp[, 1:2], r, low_tmp[,3], fun=mean)
-names(raster_low) <- "seasonal_low"
-plot(raster_low, asp = 1)
-
-
-## separate ocean data from land data
-countries <- ne_countries(returnclass = "sp") 
-countries <- spTransform(countries, "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0")
-land_high_tmp <- crop(raster_high, extent(countries)) %>%
-  mask(., countries)
-ocean_high_tmp <- crop(raster_high, extent(countries)) %>%
-  mask(., countries, inverse = TRUE)
-
-land_low_tmp <- crop(raster_low, extent(countries)) %>%
-  mask(., countries)
-ocean_low_tmp <- crop(raster_low, extent(countries)) %>%
-  mask(., countries, inverse = TRUE)
-
-plot(ocean_high_tmp)
-plot(ocean_low_tmp)
-plot(land_high_tmp)
-plot(land_low_tmp)
   
 
 

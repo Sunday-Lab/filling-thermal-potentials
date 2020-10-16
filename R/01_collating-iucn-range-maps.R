@@ -268,7 +268,7 @@ ggplot(props, aes(fill = leftover_type, y = area, x=reorder(species, -area))) +
   geom_bar(position="stack", stat="identity") +
   coord_flip() +
   labs(y = "Area (km^2)", x = "Species", fill = "") +
-  scale_fill_manual(values = c("red", "black", "skyblue"), labels=c("GBIF range not in IUCN range","Overlap between ranges","IUCN range not in GBIF range"))
+  scale_fill_manual(values = c("purple4", "forestgreen", "orange"), labels=c("GBIF range not in IUCN range","Overlap between ranges","IUCN range not in GBIF range"))
 
 ggsave(device = "png", filename = "figures/IUCN-GBIF-range-overlap.png")
 
