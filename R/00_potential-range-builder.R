@@ -29,6 +29,22 @@ names(raster_terr_low) <- "seasonal_low_temp"
 plot(raster_terr_low, asp = 1)
 
 
+## read in seasonal high and low temp data:
+marine_seasonal_high <- read.csv("data-processed/marine_seasonal-max-temps.csv")
+marine_seasonal_low <- read.csv("data-processed/marine_seasonal-min-temps.csv")
+
+## rasterize:
+r <- raster(xmn=min(long), xmx=max(long), ymn=min(lat), ymx=max(lat), 
+            crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
+
+raster_marine_high <- rasterize(marine_seasonal_high[, 1:2], r, marine_seasonal_high[,3], fun=mean)
+names(raster_marine_high) <- "seasonal_high_temp"
+plot(raster_marine_high, asp = 1)
+
+raster_marine_low <- rasterize(marine_seasonal_low[, 1:2], r, marine_seasonal_low[,3], fun=mean)
+names(raster_marine_low) <- "seasonal_low_temp"
+plot(raster_marine_low, asp = 1)
+
 
 
 

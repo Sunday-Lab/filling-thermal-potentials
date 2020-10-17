@@ -102,9 +102,9 @@ while (rep < 2020) {
       x = 1
       iteration = (rep-1950)/10
       while (x < 366) {
-        mean_max[row, col, x+365*iteration] <- mean(arr.temps_max[row, col, seq(x, 3650, x)], 
+        mean_max[row, col, x+365*iteration] <- mean(arr.temps_max[row, col, seq(x, 3650, 365)], 
                                                     na.rm = TRUE)
-        mean_min[row, col, x+365*iteration] <- mean(arr.temps_min[row, col, seq(x, 3650, x)], 
+        mean_min[row, col, x+365*iteration] <- mean(arr.temps_min[row, col, seq(x, 3650, 365)], 
                                                     na.rm = TRUE)
         x = x +1
       }
@@ -154,3 +154,104 @@ final_min <- final_min[-1,] %>%
 ## save data:
 write.csv(final_max, "data-processed/terrestrial_seasonal-max-temps.csv", row.names = FALSE)
 write.csv(final_min, "data-processed/terrestrial_seasonal-min-temps.csv", row.names = FALSE)
+
+
+
+####################################################################################
+#####                 MARINE SEASONAL TEMPERATURE HIGH AND LOW                ######
+####################################################################################
+firstset <- "/Volumes/ADATA HV620/temperature-data/marine/sst.wkmean.1981-1989.nc"
+secondset <- "/Volumes/ADATA HV620/temperature-data/marine/sst.wkmean.1990-present.nc"
+landmask <- "/Volumes/ADATA HV620/temperature-data/marine/lsmask.nc" 
+
+ncfile_first <- nc_open(firstset)
+ncfile_second <- nc_open(secondset)
+ncfile_mask <- nc_open(landmask)
+
+## create variables for things needed to use data
+lat <- ncvar_get(ncfile_first, "lat")
+long <- ncvar_get(ncfile_first, "lon")
+mask <- ncvar_get(ncfile_mask, "mask")
+
+## close the files
+nc_close(ncfile_first)
+nc_close(ncfile_second)
+nc_close(ncfile_mask)
+
+lt_weekly_means <- array(dim = c(360, 180, 52))
+
+firstset <-
+  paste("/Volumes/ADATA HV620/temperature-data/marine/sst.wkmean.1981-1989.nc",
+        sep = "")
+secondset <-
+  paste("/Volumes/ADATA HV620/temperature-data/marine/sst.wkmean.1990-present.nc",
+        sep = "")
+ncfile_first <- nc_open(firstset)
+ncfile_second <- nc_open(secondset)
+
+## week centred on Sunday
+## first day is October 29, 1981
+## last day is December 28, 1989
+time_first <- ncvar_get(ncfile_first, "time")
+
+## week centred on Wednesday
+## first day is December 31, 1989
+## last day is October 4, 2020
+time_second <- ncvar_get(ncfile_second, "time")
+
+## create variables for data
+sst_first <- ncvar_get(ncfile_first, "sst")
+sst_second <- ncvar_get(ncfile_second, "sst")
+
+## close files
+nc_close(ncfile_first)
+nc_close(ncfile_second)
+
+max_weekly_mean <- data.frame(matrix(ncol = 3))
+colnames(max_weekly_mean) = c("latitude", "longitude", "seasonal_high_temp")
+min_weekly_mean <- data.frame(matrix(ncol = 3))
+colnames(min_weekly_mean) = c("latitude", "longitude", "seasonal_low_temp")
+
+## loop through each element (unique pairs of row x column)
+row =  1
+while (row < nrow(sst_first) + 1) {
+  col = 1
+  while (col < ncol(sst_first) + 1) {
+    ## if it is a cell on land, skip it
+    if (mask[row, col] == 0) {
+      col = col + 1
+    }
+    else {
+      ## retrieve temps in cell
+      temps <- sst_first[row, col,]
+      temps <- append(temps, sst_second[row, col,])
+      
+      ## calculate average temp in each cell for each week over the period and store
+      x = 1
+      while (x < 53) {
+        lt_weekly_means[row, col, x] <- mean(temps[seq(x, 2033, 52)],
+                                             na.rm = TRUE)
+        
+        x = x + 1
+      }
+      ## get maximum weekly mean temperature and minimum weekly mean temperature for cell
+      max_weekly_mean <- rbind(max_weekly_mean, c(lat[col], long[row], max(lt_weekly_means[row, col,], na.rm=TRUE)))
+      min_weekly_mean <- rbind(min_weekly_mean, c(lat[col], long[row],  min(lt_weekly_means[row, col,], na.rm=TRUE)))
+      
+      col = col + 1
+    }
+  }
+  row = row + 1
+}
+
+max_weekly_mean <- max_weekly_mean[-1,] %>%
+  select(longitude, latitude, seasonal_high_temp)
+min_weekly_mean <- min_weekly_mean[-1,] %>%
+  select(longitude, latitude, seasonal_low_temp)
+
+## save these datasets as seasonal high and low temps
+write.csv(max_weekly_mean, "data-processed/marine_seasonal-max-temps.csv", row.names = FALSE)
+write.csv(min_weekly_mean, "data-processed/marine_seasonal-min-temps.csv", row.names = FALSE)
+
+
+
