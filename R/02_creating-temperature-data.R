@@ -245,13 +245,14 @@ while (row < nrow(sst_first) + 1) {
 }
 
 max_weekly_mean <- max_weekly_mean[-1,] %>%
-  select(longitude, latitude, seasonal_high_temp)
+  select(longitude, latitude, seasonal_high_temp) %>%
+  mutate(longitude = ifelse(longitude < 180, longitude, longitude - 360))
+
 min_weekly_mean <- min_weekly_mean[-1,] %>%
-  select(longitude, latitude, seasonal_low_temp)
+  select(longitude, latitude, seasonal_low_temp) %>%
+  mutate(longitude = ifelse(longitude < 180, longitude, longitude - 360))
+
 
 ## save these datasets as seasonal high and low temps
 write.csv(max_weekly_mean, "data-processed/marine_seasonal-max-temps.csv", row.names = FALSE)
 write.csv(min_weekly_mean, "data-processed/marine_seasonal-min-temps.csv", row.names = FALSE)
-
-
-
