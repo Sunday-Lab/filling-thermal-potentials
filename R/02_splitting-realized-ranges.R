@@ -54,6 +54,7 @@ crosses_equator <- filter(realized_ranges, equator_check == TRUE) %>%
 
 realized_ranges <- rbind(northern_ranges, southern_ranges, crosses_equator)
 
+st_write(realized_ranges, "data-processed/realized-ranges_unsplit.shp")
 
 ## loop through all realized ranges
 i = 1
@@ -129,6 +130,7 @@ while (i < length(st_geometry(realized_ranges)) + 1) {
 
 ##saveRDS(sf_cumulative, "data-processed/sf_cumulative.rds")
 rds <- readRDS("data-processed/sf_cumulative.rds")
+st_write(sf_cumulative, "data-processed/realized-ranges_split.shp")
 
 ## code to visualize each range-splitting action:
 countries <- ne_countries(returnclass = "sf") %>%

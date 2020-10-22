@@ -105,6 +105,8 @@ plot(raster_intertidal_low)
 thermal_limits <- read.csv("data-processed/thermal-limits_ectotherms-with-ranges.csv") %>%
   mutate(genus_species = paste(Genus, Species, sep = " "))
 
+## read in realized ranges:
+## realized_ranges <- st_read("data-processed/realized-ranges_unsplit.shp")
 
 
 ## TERRESTRIAL AND FRESHWATER SPECIES:
@@ -137,6 +139,8 @@ plot(raster_terr_low)
 
 
 ## exclude raster cells outside of the thermal tolerance (where seasonal_high - Tmax < 0 and where seasonal_low - Tmin < 0)
+raster_terr_high <- raster_terr_high[[-1]]
+raster_terr_low <- raster_terr_low[[-1]]
 raster_terr_high[raster_terr_high > 0] <- NA
 raster_terr_low[raster_terr_low < 0] <- NA
 
@@ -145,26 +149,59 @@ plot(raster_terr_low)
 
 
 ## combine to find cells where seasonal high temp is less than CTmax and seasonal low temp is greater than CTmin 
-combined <- raster_terr_high[[1]]
-i = 2  
+combined <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, 
+                   crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
+i = 1  
 while (i < nrow(both_upper) + 1) {
   ## "updatevalue = NA" sets cells where one thermal limit is exceeded to NA
   combined <- addLayer(combined, mask(raster_terr_high[[i]], raster_terr_low[[i]]), updatevalue = NA)
   
   i = i + 1
 }
-
-combined <- combined[[-1]]
+names(combined) <- paste(both_upper$Genus, both_upper$Species, sep = "_")
 plot(combined)
 
-## restrict range to contiguous habitat that begins at the latitudinal midpoints of the realized range's polygons:
 
+
+## restrict range to contiguous habitat that begins at the species realized range:
+i = 1
+while (i < nrow(both_upper) + 1) {
+  ## get unrestricted potential range and clump contiguous habitat together:
+  potential_range <- combined[[i]] 
+  clumped_pr <- potential_range %>%
+      clump(., directions = 8) %>%
+      rasterToPolygons(., dissolve = TRUE) %>%
+      st_as_sf()
+  
+  ##plot(potential_range)
+  plot(st_geometry(clumped_pr), main = names(potential_range))
+  
+  ## get realized range:
+  species <- names(potential_range) %>%
+    str_replace_all("_", " ")
+  
+  realized_range <- realized_ranges[which(as.character(realized_ranges$species) %in% species),]
+  
+  plot(st_geometry(realized_range), add = TRUE, col = "red")
+  
+  ## overlay realized range with potential range and restrict potential range to clumps that overlap with the realized range
+  intersects <- st_intersects(clumped_pr, realized_range, sparse = FALSE)[,]
+  sub <- filter(clumped_pr, intersects == TRUE)
+  
+  plot(sub, add = TRUE, col = "blue")
+
+  
+  dev.copy(png, filename = paste("figures/selecting-contiguous-patches/", names(potential_range), ".png", sep = ""), width = 1000, height = 500, res = 200);
+  dev.off()
+  
+  i = i + 1
+}
 
 ## write code to restrict clumps to those crossing a set of lines (will be midpoints)
 ## and then clumps within xx km of those clumps 
 
-range <- combined[[2]]
-plot(range)
+potential <- combined[[2]]
+plot(potential)
 
 ## create multilinestring representing latitudinal midpoints of range polygons 
 multiline <- st_multilinestring(list(rbind(c(-170,0),c(-115,0)), 
@@ -172,14 +209,14 @@ multiline <- st_multilinestring(list(rbind(c(-170,0),c(-115,0)),
                                      rbind(c(10,-85),c(-10,-85)),
                                      rbind(c(-170,-10),c(110,-10))))
 
-polyraster <- clump(range, directions = 8) %>%
+polyraster <- clump(potential, directions = 8) %>%
   rasterToPolygons(., dissolve = TRUE) %>%
   st_as_sf()
 
 plot(st_geometry(polyraster))
 plot(multiline, add = TRUE) 
 
-intersects <- st_intersects(polyraster, multiline, sparse = FALSE)[,]
+intersects <- st_intersects(polyraster, range, sparse = FALSE)[,]
 sub <- filter(polyraster, intersects == TRUE)
 
 plot(sub)
