@@ -10,7 +10,6 @@ select <- dplyr::select
 
 
 
-
 ####################################################################################
 #####                       SEASONAL TEMPERATURE RASTERS                      ######
 ####################################################################################
@@ -22,11 +21,13 @@ terr_seasonal_low <- read.csv("data-processed/terrestrial_seasonal-min-temps.csv
 r <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, 
             crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
 
-raster_terr_high <- rasterize(terr_seasonal_high[, 1:2], r, terr_seasonal_high[,3], fun=mean)
+raster_terr_high <- rasterize(terr_seasonal_high[, 1:2], r, terr_seasonal_high[,3], fun=mean) 
+raster_terr_high[is.infinite(raster_terr_high)] <- NA
 names(raster_terr_high) <- "seasonal_high_temp"
 plot(raster_terr_high, asp = 1)
 
 raster_terr_low <- rasterize(terr_seasonal_low[, 1:2], r, terr_seasonal_low[,3], fun=mean)
+raster_terr_low[is.infinite(raster_terr_low)] <- NA
 names(raster_terr_low) <- "seasonal_low_temp"
 plot(raster_terr_low, asp = 1)
 
@@ -37,12 +38,56 @@ marine_seasonal_low <- read.csv("data-processed/marine_seasonal-min-temps.csv")
 
 ## rasterize:
 raster_marine_high <- rasterize(marine_seasonal_high[, 1:2], r, marine_seasonal_high[,3], fun=mean)
+raster_marine_high[is.infinite(raster_marine_high)] <- NA
 names(raster_marine_high) <- "seasonal_high_temp"
 plot(raster_marine_high, asp = 1)
 
 raster_marine_low <- rasterize(marine_seasonal_low[, 1:2], r, marine_seasonal_low[,3], fun=mean)
+raster_marine_low[is.infinite(raster_marine_low)] <- NA
 names(raster_marine_low) <- "seasonal_low_temp"
 plot(raster_marine_low, asp = 1)
+
+
+## create intertidal temperature data:
+## create polygon representing the edge of land:
+land <- raster_terr_high 
+land[is.infinite(land)] = NA 
+land[land > 0 | land < 0] <- 1
+
+polygon <- land %>%
+  rasterToPolygons(., dissolve = TRUE) %>% 
+  st_as_sf()
+smooth <- smooth(polygon, method = "ksmooth", smoothness = 10) 
+st_crs(smooth) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0")
+
+## plot(st_geometry(smooth), axes = TRUE) 
+
+## create buffer around intertidal area into sea and onto land
+buffer_sea <- st_buffer(smooth, dist = 2)
+buffer_land <- st_buffer(smooth, dist = -2)
+
+##plot(st_geometry(buffer_sea))
+##plot(st_geometry(buffer_land))
+
+## subset temperature data to include only temperatures in buffer 
+intertidal_sea_high <- raster_marine_high %>%
+  mask(., buffer_sea) 
+
+intertidal_land_high <- raster_terr_high %>%
+  mask(., buffer_land, inverse = TRUE)
+
+intertidal_sea_low <- raster_marine_low %>%
+  mask(., buffer_sea) 
+
+intertidal_land_low <- raster_terr_low %>%
+  mask(., buffer_land, inverse = TRUE)
+
+## combine land and sea temperatures, giving priority to sea temperatures 
+raster_intertidal_high <- merge(intertidal_sea_high, intertidal_land_high)
+raster_intertidal_low <- merge(intertidal_sea_low, intertidal_land_low)
+
+plot(raster_intertidal_high)
+plot(raster_intertidal_low)
 
 
 
@@ -57,58 +102,54 @@ plot(raster_marine_low, asp = 1)
 ####################################################################################
 
 ## read in thermal limits:
-thermal_limits <- read.csv("data-processed/thermal-limits_ectotherms-with-ranges.csv")
+thermal_limits <- read.csv("data-processed/thermal-limits_ectotherms-with-ranges.csv") %>%
+  mutate(genus_species = paste(Genus, Species, sep = " "))
 
 
-##### TERRESTRIAL ##### 
 
+## TERRESTRIAL AND FRESHWATER SPECIES:
 upper_limits <- thermal_limits %>%
   filter(type == "max") %>%
-  filter(realm == "Terrestrial")
+  filter(realm == "Terrestrial" | realm == "Freshwater")
 
 lower_limits <- thermal_limits %>%
   filter(type == "min") %>%
-  filter(realm == "Terrestrial")
+  filter(realm == "Terrestrial" | realm == "Freshwater")
 
 both_upper <- upper_limits[upper_limits$genus_species %in% lower_limits$genus_species,]
 both_lower <- lower_limits[lower_limits$genus_species %in% upper_limits$genus_species,]
+only_upper<- upper_limits[!upper_limits$genus_species %in% both_upper$genus_species,]
+only_lower <- lower_limits[!lower_limits$genus_species %in% both_lower$genus_species,]
 
-names_high <- c("seasonal_high", paste(both_upper$Genus, both_upper$Species, sep = "_"))
-names_low <- c("seasonal_low", paste(both_lower$Genus, both_lower$Species, sep = "_"))
 
 ## create an individual raster layer of difference between thermal limit and seasonal temperature for each species 
 species = 1
 while (species < nrow(both_upper) + 1) {
-  land_high_tmp <- addLayer(land_high_tmp, land_high_tmp[[1]] - both_upper$thermal_limit[species]) 
+  raster_terr_high <- addLayer(raster_terr_high, raster_terr_high[[1]] - both_upper$thermal_limit[species]) 
+  raster_terr_low <- addLayer(raster_terr_low, raster_terr_low[[1]] - both_lower$thermal_limit[species]) 
   
   species = species + 1
 }
-names(land_high_tmp) <- names_high
-plot(land_high_tmp)
-
-species = 1
-while (species < nrow(both_lower) + 1) {
-  land_low_tmp <- addLayer(land_low_tmp, land_low_tmp[[1]] - both_lower$thermal_limit[species]) 
-  
-  species = species + 1
-}
-names(land_low_tmp) <- names_low
-plot(land_low_tmp)
+names(raster_terr_high) <- c("seasonal_high", paste(both_upper$Genus, both_upper$Species, sep = "_"))
+names(raster_terr_low) <- c("seasonal_low", paste(both_lower$Genus, both_lower$Species, sep = "_"))
+plot(raster_terr_high)
+plot(raster_terr_low)
 
 
 ## exclude raster cells outside of the thermal tolerance (where seasonal_high - Tmax < 0 and where seasonal_low - Tmin < 0)
-land_high_tmp[land_high_tmp > 0] <- NA
-land_low_tmp[land_low_tmp < 0] <- NA
+raster_terr_high[raster_terr_high > 0] <- NA
+raster_terr_low[raster_terr_low < 0] <- NA
 
-plot(land_high_tmp)
-plot(land_low_tmp)
+plot(raster_terr_high)
+plot(raster_terr_low)
 
 
-## combine: 
-combined <- land_high_tmp[[1]]
+## combine to find cells where seasonal high temp is less than CTmax and seasonal low temp is greater than CTmin 
+combined <- raster_terr_high[[1]]
 i = 2  
 while (i < nrow(both_upper) + 1) {
-  combined <- addLayer(combined, mask(land_high_tmp[[i]], land_low_tmp[[i]]))
+  ## "updatevalue = NA" sets cells where one thermal limit is exceeded to NA
+  combined <- addLayer(combined, mask(raster_terr_high[[i]], raster_terr_low[[i]]), updatevalue = NA)
   
   i = i + 1
 }
@@ -116,65 +157,33 @@ while (i < nrow(both_upper) + 1) {
 combined <- combined[[-1]]
 plot(combined)
 
+## restrict range to contiguous habitat that begins at the latitudinal midpoints of the realized range's polygons:
 
 
-##### MARINE ##### 
-upper_limits <- thermal_limits %>%
-  filter(type == "max") %>%
-  filter(realm == "Marine")
+## write code to restrict clumps to those crossing a set of lines (will be midpoints)
+## and then clumps within xx km of those clumps 
 
-lower_limits <- thermal_limits %>%
-  filter(type == "min") %>%
-  filter(realm == "Marine")
+range <- combined[[2]]
+plot(range)
 
-both_upper <- upper_limits[upper_limits$genus_species %in% lower_limits$genus_species,]
-both_lower <- lower_limits[lower_limits$genus_species %in% upper_limits$genus_species,]
+## create multilinestring representing latitudinal midpoints of range polygons 
+multiline <- st_multilinestring(list(rbind(c(-170,0),c(-115,0)), 
+                                     rbind(c(75,15),c(89,15)), 
+                                     rbind(c(10,-85),c(-10,-85)),
+                                     rbind(c(-170,-10),c(110,-10))))
 
-names_high <- c("seasonal_high", paste(both_upper$Genus, both_upper$Species, sep = "_"))
-names_low <- c("seasonal_low", paste(both_lower$Genus, both_lower$Species, sep = "_"))
+polyraster <- clump(range, directions = 8) %>%
+  rasterToPolygons(., dissolve = TRUE) %>%
+  st_as_sf()
 
-## create an individual raster layer of difference between thermal limit and seasonal temperature for each species 
-species = 1
-while (species < nrow(both_upper) + 1) {
-  ocean_high_tmp <- addLayer(ocean_high_tmp, ocean_high_tmp[[1]] - both_upper$thermal_limit[species]) 
-  
-  species = species + 1
-}
-names(ocean_high_tmp) <- names_high
-plot(ocean_high_tmp)
+plot(st_geometry(polyraster))
+plot(multiline, add = TRUE) 
 
-species = 1
-while (species < nrow(both_lower) + 1) {
-  ocean_low_tmp <- addLayer(ocean_low_tmp, ocean_low_tmp[[1]] - both_lower$thermal_limit[species]) 
-  
-  species = species + 1
-}
-names(ocean_low_tmp) <- names_low
-plot(ocean_low_tmp)
+intersects <- st_intersects(polyraster, multiline, sparse = FALSE)[,]
+sub <- filter(polyraster, intersects == TRUE)
 
-
-## exclude raster cells outside of the thermal tolerance (where seasonal_high - Tmax < 0 and where seasonal_low - Tmin < 0)
-ocean_high_tmp[ocean_high_tmp > 0] <- NA
-ocean_low_tmp[ocean_low_tmp < 0] <- NA
-
-plot(ocean_high_tmp)
-plot(ocean_low_tmp)
-
-
-## combine: 
-combined <- ocean_high_tmp[[1]]
-i = 2  
-while (i < nrow(both_upper) + 1) {
-  combined <- addLayer(combined, mask(ocean_high_tmp[[i]], ocean_low_tmp[[i]]))
-  
-  i = i + 1
-}
-
-combined <- combined[[-1]]
-plot(combined)
-
-
-plot(combined$Oncorhynchus_tshawytscha)
+plot(sub)
+plot(st_geometry(multiline), add = TRUE, col = "RED")
 
 
 
