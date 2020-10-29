@@ -26,6 +26,10 @@ IUCN <- st_read("/Volumes/ADATA HV620/IUCN/FILTERED/IUCN-ectotherms.shp") %>%
 GBIF <- st_read("/Volumes/ADATA HV620/polygons/Filtered occurences ectotherm animals_020817.shp")
 GBIF <- GBIF[GBIF$species %in% thermal_limits$genus_species, ] ## get rid of species not in thermal ectotherm data
 
+## add source column to identify which ranges are from GBIF vs which are from IUCN:
+GBIF$source <- "GBIF"
+IUCN$source <- "IUCN"
+
 realized_ranges <- rbind(IUCN, GBIF)
 
 ## split into equator-crossers, northern hemisphere and southern hemisphere ranges:
@@ -65,7 +69,7 @@ while (i < length(st_geometry(realized_ranges)) + 1) {
   ## get range and latitudinal midpoint
   ## for ranges that are very complex and take forevvvvver to split, simplify first:
   if (i %in% c(100, 173, 190, 191, 192, 196, 197, 198, 199, 205, 206, 209, 225, 229, 426, 524)) {
-    range <- ms_simplify(realized_ranges[i, ])
+    range <- ms_simplify(realized_ranges[i, ], keep_shapes = TRUE)
   }
   else {
     range <- realized_ranges[i, ]

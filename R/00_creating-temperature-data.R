@@ -147,9 +147,11 @@ while(row < nrow(mean_max) + 1) {
 }
 
 final_max <- final_max[-1,] %>%
-  select(longitude, latitude, seasonal_high_temp)
+  select(longitude, latitude, seasonal_high_temp) %>%
+  filter(!is.infinite(seasonal_high_temp))
 final_min <- final_min[-1,] %>%
-  select(longitude, latitude, seasonal_low_temp)
+  select(longitude, latitude, seasonal_low_temp) %>%
+  filter(!is.infinite(seasonal_low_temp))
 
 ## save data:
 write.csv(final_max, "data-processed/terrestrial_seasonal-max-temps.csv", row.names = FALSE)
