@@ -112,14 +112,16 @@ while (i < length(st_geometry(realized_ranges)) + 1) {
     mutate(species = range$species) %>%
     mutate(latitudinal_midpoint = latitudinal_midpoint) %>%
     mutate(poleward_or_equatorward = "equatorward") %>%
-    mutate(hemisphere = range$hemisphere)
+    mutate(hemisphere = range$hemisphere) %>%
+    mutate(source = range$source)
   
   sf_above <- st_sfc(lapply(above, function (x) st_polygon(x))) %>%
     st_as_sf(.) %>%
     mutate(species = range$species) %>%
     mutate(latitudinal_midpoint = latitudinal_midpoint) %>%
     mutate(poleward_or_equatorward = "poleward") %>%
-    mutate(hemisphere = range$hemisphere)
+    mutate(hemisphere = range$hemisphere) %>%
+    mutate(source = range$source)
   
   if (i == 1) {
     sf_cumulative <- rbind(sf_above, sf_below)
@@ -132,7 +134,7 @@ while (i < length(st_geometry(realized_ranges)) + 1) {
 }
 
 
-##saveRDS(sf_cumulative, "data-processed/sf_cumulative.rds")
+#3saveRDS(sf_cumulative, "data-processed/sf_cumulative.rds")
 rds <- readRDS("data-processed/sf_cumulative.rds")
 st_write(sf_cumulative, "data-processed/realized-ranges_split.shp")
 
