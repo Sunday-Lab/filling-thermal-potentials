@@ -133,10 +133,18 @@ while (i < length(st_geometry(realized_ranges)) + 1) {
   i = i + 1
 }
 
+## combine polygons of each species equatorward and poleward range together into a multipolygon:
+sf_cumulative <- sf_cumulative %>%
+  mutate(species_type = paste(species, poleward_or_equatorward)) %>%
+  group_by(species_type) %>%
+  aggregate(., list(.$species_type), function(x) x[1]) %>%
+  select(-species_type, -Group.1)
 
-#3saveRDS(sf_cumulative, "data-processed/sf_cumulative.rds")
+##saveRDS(sf_cumulative, "data-processed/sf_cumulative.rds")
 rds <- readRDS("data-processed/sf_cumulative.rds")
 st_write(sf_cumulative, "data-processed/realized-ranges_split.shp")
+
+
 
 ## code to visualize each range-splitting action:
 countries <- ne_countries(returnclass = "sf") %>%

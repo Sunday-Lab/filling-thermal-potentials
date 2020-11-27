@@ -60,7 +60,7 @@ reptiles_overlap <- reptiles_all %>%
   filter(binomial %in% reptiles)
 rm(reptiles_all,reptiles)
 
-seabream_all <- st_read("/Volumes/ADATA HV620/IUCN/SEABREAMS_PORGIES_PICARELS/SEABREAMS_PORGIES_PICARELS.shp")
+seabream_all <- st_read("/Volumes/ADATA HV620/IUCN/SEABREAMS_PORGIES_PICARELS/SEABREAMS_fcrsPORGIES_PICARELS.shp")
 seabream <- thermal_species[which(thermal_species %in% seabream_all$binomial)]
 
 seabream_overlap <- seabream_all %>%
