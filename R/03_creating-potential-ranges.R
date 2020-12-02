@@ -16,13 +16,15 @@ select <- dplyr::select
 ####################################################################################
 #####                       SEASONAL TEMPERATURE RASTERS                      ######
 ####################################################################################
+r <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, 
+            crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"),
+            res = 1)
+
 ## read in seasonal high and low temp data:
 terr_seasonal_high <- read.csv("data-processed/terrestrial_seasonal-max-temps.csv")
 terr_seasonal_low <- read.csv("data-processed/terrestrial_seasonal-min-temps.csv")
 
 ## rasterize:
-
-
 raster_terr_high <- rasterize(terr_seasonal_high[, 1:2], r, terr_seasonal_high[,3], fun=mean) 
 raster_terr_high[is.infinite(raster_terr_high)] <- NA
 names(raster_terr_high) <- "seasonal_high_temp"
@@ -33,6 +35,11 @@ raster_terr_low[is.infinite(raster_terr_low)] <- NA
 names(raster_terr_low) <- "seasonal_low_temp"
 ##plot(raster_terr_low, asp = 1)
 
+## write out mask layer for use in restricting realized ranges:
+raster_terr_mask <- raster_terr_low
+raster_terr_mask[!is.na(raster_terr_mask)] = 1
+##plot(raster_terr_mask, asp = 1)
+writeRaster(raster_terr_mask, "./data-processed/raster_terr_mask.nc")
 
 ## read in seasonal high and low temp data:
 marine_seasonal_high <- read.csv("data-processed/marine_seasonal-max-temps.csv") 
@@ -49,6 +56,12 @@ raster_marine_low[is.infinite(raster_marine_low)] <- NA
 names(raster_marine_low) <- "seasonal_low_temp"
 ##plot(raster_marine_low, asp = 1)
 
+## write out mask layer for use in restricting realized ranges:
+raster_marine_mask <- raster_marine_low
+raster_marine_mask[!is.na(raster_marine_mask)] = 1
+##plot(raster_marine_mask, asp = 1)
+writeRaster(raster_marine_mask, "./data-processed/raster_marine_mask.nc")
+
 
 ## create intertidal temperature data:
 ## create polygon representing the edge of land:
@@ -59,7 +72,7 @@ land[land > 0 | land < 0] <- 1
 polygon <- land %>%
   rasterToPolygons(., dissolve = TRUE) %>% 
   st_as_sf()
-smooth <- smooth(polygon, method = "ksmooth", smoothness = 10) 
+smooth <- smoothr::smooth(polygon, method = "ksmooth", smoothness = 10) 
 st_crs(smooth) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0")
 ## plot(st_geometry(smooth), axes = TRUE) 
 
@@ -88,6 +101,11 @@ raster_intertidal_low <- merge(intertidal_sea_low, intertidal_land_low)
 ##plot(raster_intertidal_high)
 ##plot(raster_intertidal_low)
 
+## write out mask layer for use in restricting realized ranges:
+raster_intertidal_mask <- raster_intertidal_low
+raster_intertidal_mask[!is.na(raster_intertidal_mask)] = 1
+##plot(raster_intertidal_mask, asp = 1)
+writeRaster(raster_intertidal_mask, "./data-processed/raster_intertidal_mask.nc")
 
 
 

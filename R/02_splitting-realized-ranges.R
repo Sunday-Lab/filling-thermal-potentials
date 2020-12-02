@@ -56,9 +56,15 @@ southern_ranges <- filter(does_not, in_north == FALSE & in_south == TRUE) %>%
 crosses_equator <- filter(realized_ranges, equator_check == TRUE) %>%
   mutate(hemisphere = "EQUATOR")
 
-realized_ranges <- rbind(northern_ranges, southern_ranges, crosses_equator)
+realms <- thermal_limits %>%
+  select(genus_species, realm) %>%
+  filter(!duplicated(.))
 
-st_write(realized_ranges, "data-processed/realized-ranges_unsplit.shp")
+realized_ranges <- rbind(northern_ranges, southern_ranges, crosses_equator) %>%
+  left_join(realized_ranges, realms, by = c("species" = "genus_species"))
+
+st_write(realized_ranges, "data-processed/realized-ranges_unsplit.shp", append = FALSE)
+
 
 ## loop through all realized ranges
 i = 1

@@ -15,10 +15,17 @@ select <- dplyr::select
 realized_ranges <- st_read("data-processed/realized-ranges_unsplit.shp") %>%
   mutate(range_id = paste(species, source, sep = "_"))
 
-## rasterize them:
+##      RASTERIZE REALIZED RANGES:    ##
+#########################################
+## constrain realized range rasters by habitat allowed to be in the potential range
 r <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, 
             crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"),
             res = 1)
+
+## read in realm mask layers:
+t_mask <- raster("./data-processed/raster_terr_mask.nc")
+m_mask <- raster("./data-processed/raster_marine_mask.nc")
+i_mask <- raster("./data-processed/raster_intertidal_mask.nc")
 
 i = 1
 while (i < nrow(realized_ranges)+1) {
@@ -33,6 +40,18 @@ while (i < nrow(realized_ranges)+1) {
   rr_raster[rr_raster > 0] <- 1 ## set all values that overlapped range in raster to 1
   rr_raster[rr_raster != 1] <- NA ## set all other values to NA
   
+  ## constrain by habitat:
+  if(range$realm == "Terrestrial") {
+    rr_raster <- mask(rr_raster,t_mask, updatevalue = NA, maskvalue = 1, inverse = TRUE) ## set cells the mask that do not overlap realized range to NA
+  }
+  else if(range$realm == "Marine") {
+    rr_raster <- mask(rr_raster, m_mask, updatevalue = NA, maskvalue = 1,inverse = TRUE) 
+  }
+  else {
+    rr_raster <- mask(rr_raster, i_mask, updatevalue = NA, maskvalue = 1, inverse = TRUE) 
+  }
+  
+  ## add to list of rasters
   if (i == 1) {
     rasterized_rrs <- rr_raster
   }
@@ -54,7 +73,13 @@ potential_ranges <- readRDS("data-processed/potential_ranges.rds")
 
 range_filling <- data.frame(range = names(potential_ranges), equ_of = NA, pol_of = NA,
                             equ_op = NA, pol_op = NA, weighted_equ_of = NA, weighted_pol_of = NA,
-                            weighted_equ_op = NA, weighted_pol_op = NA)
+                            weighted_equ_op = NA, weighted_pol_op = NA,
+                            equ_of_prop = NA, pol_of_prop = NA,
+                            equ_op_prop = NA, pol_op_prop = NA, 
+                            weighted_equ_of_prop = NA, 
+                            weighted_pol_of_prop = NA,
+                            weighted_equ_op_prop = NA, 
+                            weighted_pol_op_prop= NA )
 
 i = 1
 while (i < nlayers(potential_ranges) + 1) {
@@ -91,10 +116,10 @@ while (i < nlayers(potential_ranges) + 1) {
   masked_pr <- mask(pr, rr, updatevalue = NA, maskvalue = 1) ## set cells in pr that are overlapped by rr to NA
   masked_rr <- mask(rr, pr, updatevalue = NA, maskvalue = 1) ## set cells in rr that are overlapped by pr to NA
   
-  plot(rr)
-  plot(pr, add = TRUE, col = "red")
-  plot(masked_pr, add = TRUE, col = "blue")
-  plot(masked_rr, add = TRUE, col = "orange")
+  # plot(rr)
+  # plot(pr, add = TRUE, col = "red")
+  # plot(masked_pr, add = TRUE, col = "blue")
+  # plot(masked_rr, add = TRUE, col = "orange")
   
   ## CALCULATE REALIZED RANGE OVERFILLING:
   #########################################
@@ -126,12 +151,31 @@ while (i < nlayers(potential_ranges) + 1) {
   range_filling$equ_of[i] <- freq(equ_of, value = 1) 
   range_filling$pol_of[i] <- freq(pol_of, value = 1)
   
+  ## get total number of cells in realized range above and below latitudinal midpoint
+  ncell_rr_equ <- freq(mask(rr, rect_raster_equ), value = 1)
+  ncell_rr_pol <- freq(mask(rr, rect_raster_pol), value = 1)
+  
+  ## add proportion version:
+  range_filling$equ_of_prop[i] <- ifelse(ncell_rr_equ == 0, 0, 
+                                         freq(equ_of, value = 1) / ncell_rr_equ)
+  range_filling$pol_of_prop[i] <- ifelse(ncell_rr_pol ==0, 0, 
+                                         freq(pol_of, value = 1) / ncell_rr_pol)
+  
   ## add weighted version:
   ## weight warm overfilling by abs(lmp_pr - min lat of rr) 
   range_filling$weighted_equ_of[i] <- range_filling$equ_of[i] * abs(pr_lmp - rr_min)
   
   ## weight cold overfilling by abs(lmp_pr - max lat of rr) 
   range_filling$weighted_pol_of[i] <- range_filling$pol_of[i] * abs(pr_lmp - rr_max)
+  
+  ## add proportion version:
+  range_filling$weighted_equ_of_prop[i] <- ifelse(ncell_rr_equ == 0, 0, 
+                                                  (range_filling$equ_of[i]/ ncell_rr_equ) 
+                                                  * abs(pr_lmp - rr_min))
+  range_filling$weighted_pol_of_prop[i] <- ifelse(ncell_rr_pol == 0, 0, 
+                                                  (range_filling$pol_of[i]/ ncell_rr_pol)
+                                                  * abs(pr_lmp - rr_max))
+  
   
   ## CALCULATE POTNETIAL RANGE OVERPREDICTING
   #########################################
@@ -163,12 +207,30 @@ while (i < nlayers(potential_ranges) + 1) {
   range_filling$equ_op[i] <- freq(equ_op, value = 1) 
   range_filling$pol_op[i] <- freq(pol_op, value = 1) 
   
+  ## get total number of cells in realized range above and below latitudinal midpoint
+  ncell_pr_equ <- freq(mask(pr, rect_raster_equ), value = 1)
+  ncell_pr_pol <- freq(mask(pr, rect_raster_pol), value = 1)
+  
+  ## add proportion version:
+  range_filling$equ_op_prop[i] <- ifelse(ncell_pr_equ == 0, 0, 
+                                         freq(equ_op, value = 1) / ncell_pr_equ)
+  range_filling$pol_op_prop[i] <- ifelse(ncell_pr_pol == 0, 0, 
+                                         freq(pol_op, value = 1) / ncell_pr_pol)
+  
   ## add weighted version:
   ## weight warm overpredicting by abs(rr_lmp - min lat of pr) 
   range_filling$weighted_equ_op[i] <- range_filling$equ_op[i] * abs(rr_lmp - pr_min)
   
   ## weight cold overpredicting by abs(rr_lmp - max lat of pr) 
   range_filling$weighted_pol_op[i] <- range_filling$pol_op[i] * abs(rr_lmp - pr_max)
+  
+  ## add proportion version:
+  range_filling$weighted_equ_op_prop[i] <- ifelse(ncell_pr_equ == 0, 0, 
+                                                  (range_filling$equ_op[i]/ ncell_pr_equ)
+                                                  * abs(rr_lmp - pr_min))
+  range_filling$weighted_pol_op_prop[i] <- ifelse(ncell_pr_pol == 0, 0, 
+                                                  (range_filling$pol_op[i]/ ncell_pr_pol) * 
+                                                    abs(rr_lmp - pr_max))
   
   print(paste("Finished range number:", i))
   i = i + 1 
@@ -178,12 +240,12 @@ while (i < nlayers(potential_ranges) + 1) {
 range_filling <- range_filling %>%
   mutate(species = str_replace_all(as.character(range), "\\.", " ")) %>%
   mutate(species = str_split_fixed(species, "_", n = 2)[,1]) %>%
-  mutate(source = str_split_fixed(range, "_", n = 2)[,2])
+  mutate(source = str_split_fixed(range, "_", n = 2)[,2]) 
 
 write.csv(range_filling, 'data-processed/range-filling-quantifications.csv', row.names = FALSE)
 
 
-#3range_filling <- read.csv('data-processed/range-filling-quantifications.csv')
+##range_filling <- read.csv('data-processed/range-filling-quantifications.csv')
 
 ## inspect metrics:
 ## arrange 
