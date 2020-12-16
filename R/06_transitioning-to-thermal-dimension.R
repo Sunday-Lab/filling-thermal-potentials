@@ -41,10 +41,10 @@ names(raster_marine_low) <- "seasonal_low_temp"
 ##plot(raster_marine_low, asp = 1)
 
 ## merge marine high and low temps into a single raster layer:
-## if cells overlap at the land-ocean boundary, keep the more extreme of the two values 
-high_temps <- mosaic(raster_marine_high, raster_terr_high, fun = max)
+## if cells overlap at the land-ocean boundary, keep the lsea temperatures 
+high_temps <- merge(raster_marine_high, raster_terr_high)
 ##plot(high_temps, asp = 1)
-low_temps <- mosaic(raster_marine_low, raster_terr_low, fun = min)
+low_temps <- merge(raster_marine_low, raster_terr_low)
 ##plot(low_temps, asp = 1)
 
 
@@ -102,7 +102,7 @@ write.csv(realized_temps, "./data-processed/thermal-dimension_realized-temps.csv
 ##        in their potential range using the same method
 
 ## read in potential ranges:
-potential_ranges <- readRDS("data-processed/potential_ranges.rds")
+potential_ranges <- readRDS("data-processed/potential_ranges_notcutatequator.rds")
 
 ## loop through ranges and extract temperatures under each 
 i = 1
@@ -169,14 +169,14 @@ while (num < length(unique(potential_temps$range)) + 1) {
   ctmin <- lims$thermal_limit[which(lims$type == "min")]
   
   hplot <- h %>%
-    ggplot(., aes(x = temps, y =..density.., fill = type)) +  geom_density(alpha = 0.3) +
-    labs(fill = "Range:", y = "Density", x = "Seasonal high temperature", title = h$range[1]) + 
-    geom_vline(xintercept = ctmax, linetype="dotted", size = 0.5)
+    ggplot(., aes(x = temps, fill = type)) +
+    labs(fill = "Range:", y = "Frequency", x = "Seasonal high temperature", title = h$range[1]) + 
+    geom_vline(xintercept = ctmax, linetype="dotted", size = 0.5) + geom_histogram(bins = 100, position ="identity", alpha = .6) 
   
   lplot <- l %>%
-    ggplot(., aes(x = temps, y =..density.., fill = type)) +  geom_density(alpha = 0.3) +
-    labs(fill = "Range:", y = "Density", x = "Seasonal low temperature", title = l$range[1]) + 
-    geom_vline(xintercept = ctmin, linetype="dotted", size = 0.5)
+    ggplot(., aes(x = temps, fill = type)) +
+    labs(fill = "Range:", y = "Frequency", x = "Seasonal low temperature", title = h$range[1]) + 
+    geom_vline(xintercept = ctmin, linetype="dotted", size = 0.5) + geom_histogram(bins = 100, position ="identity", alpha = .6)
   
   hlplot <- grid.arrange(lplot, hplot, ncol = 2)
   
@@ -190,7 +190,158 @@ while (num < length(unique(potential_temps$range)) + 1) {
 
 
 
- 
+
+
+## try plotting in 2D thermal niche space!!!
+
+## first, reorganize temperature data
+## we need to know which high and low temperatures belong to each raster cell
+
+rasterized_rrs <- readRDS("data-processed/rasterized_rrs.rds")
+
+## loop through ranges and extract temperatures under each 
+i = 1
+realized_temps_2D <- c()
+while (i < nlayers(rasterized_rrs) + 1) {
+  range <- rasterized_rrs[[i]]
+  
+  ## use realized range raster as a mask to extract temperatures underneath
+  highs <- mask(high_temps, range)
+  lows <- mask(low_temps, range)
+  vals <- data.frame(range = names(rasterized_rrs)[i], type = "realized", high_temp = values(highs), 
+                     low_temp = values(lows)) %>%
+    filter(!is.na(high_temp) | !is.na(low_temp)) 
+  
+  if (nrow(vals) == 0) { ## if no temperatures 
+    vals <- data.frame(range = names(rasterized_rrs)[i], type = "realized", high_temp = NA, 
+                       low_temp = NA) 
+  }
+  
+  
+  if(i == 1) {
+    realized_temps_2D <- vals
+  }
+  else {
+    realized_temps_2D <- rbind(realized_temps_2D, vals)
+  }
+  i = i + 1
+}
+
+i = 1
+potential_temps_2D <- c()
+while (i < nlayers(potential_ranges) + 1) {
+  range <- potential_ranges[[i]]
+  
+  ## use realized range raster as a mask to extract temperatures underneath
+  highs <- mask(high_temps, range)
+  lows <- mask(low_temps, range)
+  vals <- data.frame(range = names(potential_ranges)[i], type = "potential", high_temp = values(highs), 
+                     low_temp = values(lows)) %>%
+    filter(!is.na(high_temp) | !is.na(low_temp)) 
+  
+  if (nrow(vals) == 0) { ## if no temperatures 
+    vals <- data.frame(range = names(potential_ranges)[i], type = "potential", high_temp = NA, 
+                       low_temp = NA) 
+  }
+  
+  
+  if(i == 1) {
+    potential_temps_2D <- vals
+  }
+  else {
+    potential_temps_2D <- rbind(potential_temps_2D, vals)
+  }
+  i = i + 1
+}
 
 
 
+all_temps_2D <- rbind(realized_temps_2D, potential_temps_2D)
+
+all_temps_2D %>%
+  filter(range == "Chamaeleo.dilepis_IUCN") %>%
+  ggplot(., aes(x = high_temp, y = low_temp)) +
+  geom_bin2d(aes(color = type))
+
+lims <- thermal_limits[which(thermal_limits$genus_species == "Chamaeleo.dilepis"),]
+ctmax <- lims$thermal_limit[which(lims$type == "max")]
+ctmin <- lims$thermal_limit[which(lims$type == "min")]
+
+
+all_temps_2D %>%
+  filter(range == "Chamaeleo.dilepis_IUCN") %>%
+  ggplot(., aes(x = high_temp, y = low_temp, colour = type)) +
+  stat_density2d(geom = "density2d", aes(color = type, alpha=..level..),
+                 size=2,
+                 contour=TRUE) +
+  labs(x = "Seasonal high temperature", y = "Seasonal low temperature", colour = "Range", alpha = "Density", title = "Chamaeleo.dilepis_IUCN") + geom_vline(xintercept = ctmax, linetype="dotted", size = 0.5) +
+  geom_hline(yintercept = ctmin, linetype="dotted", size = 0.5) 
+
+
+## try for all and save to a folder:
+
+## get thermal limits:
+lims <- thermal_limits[which(thermal_limits$genus_species == str_split_fixed(last(names(potential_ranges)), "_", n = 2)[1,1]),]
+ctmax <- lims$thermal_limit[which(lims$type == "max")]
+ctmin <- lims$thermal_limit[which(lims$type == "min")]
+
+
+
+
+
+
+
+
+num = 1 
+while (num < length(unique(potential_temps$range)) + 1) {
+  p <- all_temps_2D %>%
+    filter(range == unique(potential_temps$range)[num]) %>%
+    filter(type == "potential")
+  
+  r <- all_temps_2D %>%
+    filter(range == unique(potential_temps$range)[num]) %>%
+    filter(type == "realized")
+  
+  ## get thermal limits:
+  lims <- thermal_limits[which(thermal_limits$genus_species == str_split_fixed(p$range[1], "_", n = 2)[1,1]),]
+  ctmax <- lims$thermal_limit[which(lims$type == "max")]
+  ctmin <- lims$thermal_limit[which(lims$type == "min")]
+  
+  pplot <- p %>%
+    ggplot(., aes(x = high_temp, y = low_temp)) +
+    geom_bin2d(binwidth = 0.25) +
+    scale_fill_gradient(low="lightblue", high="darkblue") +
+    labs(fill = "Potential range frequency") 
+    
+  rplot <- r %>%
+    ggplot(., aes(x = high_temp, y = low_temp)) +
+    geom_bin2d(binwidth = 0.25) +
+    scale_fill_gradient(low= "pink", high="purple") +
+    labs(fill = "Realized range frequency")
+  
+  
+    
+  prplot <- ggplot(data = layer_data(pplot),
+                                 aes(x = x, y = y, fill = fill)) +
+    geom_tile() +
+    geom_tile(data = layer_data(rplot)) +
+    scale_fill_identity() +
+    theme_bw() +
+    geom_vline(xintercept = ctmax, linetype="dotted", size = 0.5) +
+    geom_hline(yintercept = ctmin, linetype="dotted", size = 0.5) + 
+    labs(x = "Seasonal high temperature (C)", y = "Seasonal low temperature (C)", title = p$range[1])
+  
+  library(cowplot)
+  prplot <- plot_grid(prplot,
+            plot_grid(get_legend(pplot),
+                      get_legend(rplot),
+                      ncol = 1),
+            nrow = 1,
+            rel_widths = c(1, 0.7)) 
+  
+  ggsave(prplot, path = "figures/thermal-dimension_2D/", 
+         filename = paste(p$range[1], ".png",sep = "_"), 
+         height = 6, width = 11, units = "in", device = "png")
+  
+  num = num + 1
+}
