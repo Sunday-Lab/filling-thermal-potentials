@@ -285,7 +285,7 @@ prs_intertidal_one_limit <- create_potential_ranges_one_limit(clumped_temps = cl
 ########################################################
 potential_ranges_both_limits <- stack(prs_terrestrial, prs_marine, prs_intertidal)
 ##saveRDS(potential_ranges_both_limits, "data-processed/potential_ranges.rds")
-writeRaster(potential_ranges_both_limits, "data-processed/potential_ranges_both_limits.nc")
+##saveRDS(potential_ranges_both_limits, "data-processed/potential_ranges_notcutatequator.rds")
 
 potential_ranges_one_limit <- stack(prs_terrestrial_one_limit, prs_marine_one_limit, 
                                     prs_intertidal_one_limit)
@@ -440,30 +440,31 @@ create_potential_ranges <- function (clumped_temps,
       }
       
       ## if realized range does not cross equator, cut off potential range at the equator:
-      lat_mp <- realized_range$lat_mp[num]
+      ## DEC 14: commented out and rerun
+      #lat_mp <- realized_range$lat_mp[num]
       
-      if (!realized_range$hemisphere[num] == "EQUATOR" & lat_mp > 0) {
-        p <- Polygon(matrix(c(-180,0,-180,90,180,90,180,0,-180,0),
-                            ncol=2, byrow=TRUE))
-        rect <- SpatialPolygons(list(Polygons(list(p), "p1")))
-      }
-      else if (!realized_range$hemisphere[num] == "EQUATOR" & lat_mp < 0) {
-        p <- Polygon(matrix(c(-180,-90,-180,0,180,0,180,-90,-180,-90),
-                            ncol=2, byrow=TRUE))
-        rect <- SpatialPolygons(list(Polygons(list(p), "p1"))) 
-      }
-      else {
-        p <- Polygon(matrix(c(-180, 90,-180,-90,180,-90,180, 90,-180, 90),
-                            ncol=2, byrow=TRUE))
-        rect <- SpatialPolygons(list(Polygons(list(p), "p1")))
-      }
+      # if (!realized_range$hemisphere[num] == "EQUATOR" & lat_mp > 0) {
+      #   p <- Polygon(matrix(c(-180,0,-180,90,180,90,180,0,-180,0),
+      #                       ncol=2, byrow=TRUE))
+      #   rect <- SpatialPolygons(list(Polygons(list(p), "p1")))
+      # }
+      # else if (!realized_range$hemisphere[num] == "EQUATOR" & lat_mp < 0) {
+      #   p <- Polygon(matrix(c(-180,-90,-180,0,180,0,180,-90,-180,-90),
+      #                       ncol=2, byrow=TRUE))
+      #   rect <- SpatialPolygons(list(Polygons(list(p), "p1"))) 
+      # }
+      # else {
+      #   p <- Polygon(matrix(c(-180, 90,-180,-90,180,-90,180, 90,-180, 90),
+      #                       ncol=2, byrow=TRUE))
+      #   rect <- SpatialPolygons(list(Polygons(list(p), "p1")))
+      # }
+      # 
+      # rect_raster <- rasterize(rect, r, getCover=TRUE)
+      # rect_raster[rect_raster==0] <- NA
       
-      rect_raster <- rasterize(rect, r, getCover=TRUE)
-      rect_raster[rect_raster==0] <- NA
+      #plot(pr_restricted, col = "orange")
       
-      #3plot(pr_restricted, col = "orange")
-      
-      pr_restricted <- mask(pr_restricted, rect_raster)
+      #pr_restricted <- mask(pr_restricted, rect_raster)
       
       ##plot(pr_restricted, col = "red", add = TRUE)
       

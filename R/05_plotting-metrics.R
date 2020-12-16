@@ -142,7 +142,7 @@ across_lat_w <- no_duplicates %>%
   geom_smooth(method = "lm") +
   labs(x = "|latitduinal midpoint of realized range|", y = "weighted proportion range filling metric", colour = "metric:")
 
-ggsave(across_lat_w, path = "./figures/", filename = "proportion-across-latitude-weighted-prop.png", device = "png", 
+ggsave(across_lat_w, path = "./figures/", filename = "across-latitude-weighted-prop.png", device = "png", 
        height = 6, width = 8)
 
 

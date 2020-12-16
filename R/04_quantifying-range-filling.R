@@ -312,7 +312,7 @@ stats <- range_filling[which(as.character(range_filling$range) == range),]
     ggplot(., aes(x = longitude, y = latitude)) +
     xlim(-180, 180) + ylim(-90,90) + coord_fixed(ratio = 1) +
     geom_raster(aes(fill=as.factor(rr))) + 
-    scale_fill_manual(values = c("red"), aesthetics = 'fill', labels = ) +
+    scale_fill_manual(values = c("yellow"), aesthetics = 'fill', labels = ) +
     annotate(geom="raster", x=r$longitude, y=r$latitude, alpha=.6,
              fill = r$pr) +
     labs(title = paste(stats$range, "\nOverfilling: warm = ", 
