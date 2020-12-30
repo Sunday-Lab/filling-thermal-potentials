@@ -11,65 +11,14 @@ select <- dplyr::select
 
 
 
-## read in realized range shapefiles:
+## read in rasterized realized ranges and realized range shapefiles:
 realized_ranges <- st_read("data-processed/realized-ranges_unsplit.shp") %>%
   mutate(range_id = paste(species, source, sep = "_"))
 
-##      RASTERIZE REALIZED RANGES:    ##
-#########################################
-## constrain realized range rasters by habitat allowed to be in the potential range
-r <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, 
-            crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"),
-            res = 1)
-
-## read in realm mask layers:
-t_mask <- raster("./data-processed/raster_terr_mask.nc")
-m_mask <- raster("./data-processed/raster_marine_mask.nc")
-i_mask <- raster("./data-processed/raster_intertidal_mask.nc")
-
-i = 1
-while (i < nrow(realized_ranges)+1) {
-  ## for ranges that are very complex and take forevvvvver to rasterize, simplify first:
-  if (i %in% c(100, 173, 190, 191, 192, 196, 197, 198, 199, 205, 206, 209, 225, 229, 426, 524)) {
-    range <- ms_simplify(realized_ranges[i, ], keep_shapes = TRUE)
-  }
-  else {
-    range <- realized_ranges[i, ]
-  }
-  rr_raster <- rasterize(range, r, background = NA, getCover = TRUE)
-  rr_raster[rr_raster > 0] <- 1 ## set all values that overlapped range in raster to 1
-  rr_raster[rr_raster != 1] <- NA ## set all other values to NA
-  
-  ## constrain by habitat:
-  if(range$realm == "Terrestrial") {
-    rr_raster <- mask(rr_raster,t_mask, updatevalue = NA, maskvalue = 1, inverse = TRUE) ## set cells the mask that do not overlap realized range to NA
-  }
-  else if(range$realm == "Marine") {
-    rr_raster <- mask(rr_raster, m_mask, updatevalue = NA, maskvalue = 1,inverse = TRUE) 
-  }
-  else {
-    rr_raster <- mask(rr_raster, i_mask, updatevalue = NA, maskvalue = 1, inverse = TRUE) 
-  }
-  
-  ## add to list of rasters
-  if (i == 1) {
-    rasterized_rrs <- rr_raster
-  }
-  else {
-    rasterized_rrs <- addLayer(rasterized_rrs, rr_raster, updatevalue = NA)
-  }
-  
-  print(paste("Finished range number:", i))
-  i = i + 1
-}
-
-names(rasterized_rrs) <- realized_ranges$range_id
-
-##saveRDS(rasterized_rrs, "data-processed/rasterized_rrs.rds")
 rasterized_rrs <- readRDS("data-processed/rasterized_rrs.rds")
 
 ## read in potential ranges:
-potential_ranges <- readRDS("data-processed/potential_ranges.rds")
+potential_ranges <- readRDS("data-processed/potential_ranges_notcutatequator.rds")
 
 range_filling <- data.frame(range = names(potential_ranges), equ_of = NA, pol_of = NA,
                             equ_op = NA, pol_op = NA, weighted_equ_of = NA, weighted_pol_of = NA,

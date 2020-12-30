@@ -112,18 +112,22 @@ while (rep < 2020) {
     }
     row = row + 1
   }
+  print(paste("On rep number:", rep))
   rep = rep + 10
 }
 
+mean_min <- readRDS("/Volumes/ADATA HV620/temperature-data/terrestrial/mean_min.rds")
+mean_max <- readRDS("/Volumes/ADATA HV620/temperature-data/terrestrial/mean_max.rds")
 
+## create temperature set matricies and lists to store data in  
+## add columns for temps species with cold and hot dormancy
+## vary # months and start time for sensitivity analysis 
 mean_max_new <- array(dim = c(360, 180, 365))
 mean_min_new <- array(dim = c(360, 180, 365))
-final_max <- data.frame(matrix(ncol = 3))
-colnames(final_max) = c("latitude", "longitude", "seasonal_high_temp")
-final_min <- data.frame(matrix(ncol = 3))
-colnames(final_min) = c("latitude", "longitude", "seasonal_low_temp")
+final_max <- list()
+final_min <- list()
 
-x = 1
+element = 1
 row = 1
 while(row < nrow(mean_max) + 1) {
   col = 1
@@ -138,25 +142,49 @@ while(row < nrow(mean_max) + 1) {
       x = x+1
     }
     ## get maximum mean daily temperature and minimum mean daily temperature for cell:
-    final_max <- rbind(final_max, c(lat[col], long[row], max(mean_max_new[row, col,], na.rm=TRUE)))
-    final_min <- rbind(final_min, c(lat[col], long[row],  min(mean_min_new[row, col,], na.rm=TRUE)))
+    max <- max(mean_max_new[row, col,], na.rm=TRUE)
+    min <- min(mean_min_new[row, col,], na.rm=TRUE)
     
+    ## get dormancy max and mins for cell:
+    h_d_max.3 <- max(sort(mean_max_new[row, col, ])[1:275], na.rm=TRUE)
+    h_d_max.2 <- max(sort(mean_max_new[row, col, ])[1:305], na.rm=TRUE)
+    h_d_max.1 <- max(sort(mean_max_new[row, col, ])[1:335], na.rm=TRUE)
+    
+    c_d_min.3 <- min(sort(mean_min_new[row, col, ])[91:365], na.rm=TRUE) 
+    c_d_min.2 <- min(sort(mean_min_new[row, col, ])[61:365], na.rm=TRUE) 
+    c_d_min.1 <- min(sort(mean_min_new[row, col, ])[31:365], na.rm=TRUE) 
+  
+    final_max[[element]] <- c(lat[col], long[row], max, h_d_max.3, h_d_max.2, h_d_max.1)
+    final_min[[element]] <- c(lat[col], long[row],  min, c_d_min.3, c_d_min.2, c_d_min.1)
+    
+    ## block out temperatures in cold months
+    ## N hemisphere: Jan, Feb, March; S hemisphere: 
+    
+    ## block out temperatures in hot months
+    ## N hemisphere: June, July, August; S hemisphere: Jan, Feb, March
+    
+    element = element + 1
     col = col + 1
   }
   row = row + 1
 }
 
-final_max <- final_max[-1,] %>%
-  select(longitude, latitude, seasonal_high_temp) %>%
-  filter(!is.infinite(seasonal_high_temp))
-final_min <- final_min[-1,] %>%
-  select(longitude, latitude, seasonal_low_temp) %>%
-  filter(!is.infinite(seasonal_low_temp))
+final_max <- data.frame(do.call(rbind, final_max), stringsAsFactors = FALSE) 
+colnames(final_max) = c("latitude", "longitude", "seasonal_high_temp",
+                        "hot_dormancy_3", "hot_dormancy_2", "hot_dormancy_1")
+final_max <- filter(final_max, !is.infinite(seasonal_high_temp)) %>%
+  select(longitude, latitude, seasonal_high_temp, hot_dormancy_1, hot_dormancy_2, hot_dormancy_3)
+
+final_min <- data.frame(do.call(rbind, final_min), stringsAsFactors = FALSE) 
+colnames(final_min) = c("latitude", "longitude", "seasonal_low_temp",
+                        "cold_dormancy_3", "cold_dormancy_2", "cold_dormancy_1")
+final_min <- filter(final_min, !is.infinite(seasonal_low_temp)) %>%
+  select(longitude, latitude, seasonal_low_temp, cold_dormancy_1, cold_dormancy_2, cold_dormancy_3)
+
 
 ## save data:
 write.csv(final_max, "data-processed/terrestrial_seasonal-max-temps.csv", row.names = FALSE)
 write.csv(final_min, "data-processed/terrestrial_seasonal-min-temps.csv", row.names = FALSE)
-
 
 
 ####################################################################################
@@ -209,12 +237,11 @@ sst_second <- ncvar_get(ncfile_second, "sst")
 nc_close(ncfile_first)
 nc_close(ncfile_second)
 
-max_weekly_mean <- data.frame(matrix(ncol = 3))
-colnames(max_weekly_mean) = c("latitude", "longitude", "seasonal_high_temp")
-min_weekly_mean <- data.frame(matrix(ncol = 3))
-colnames(min_weekly_mean) = c("latitude", "longitude", "seasonal_low_temp")
+max_weekly_mean <- list()
+min_weekly_mean <- list()
 
 ## loop through each element (unique pairs of row x column)
+element = 1
 row =  1
 while (row < nrow(sst_first) + 1) {
   col = 1
@@ -237,22 +264,43 @@ while (row < nrow(sst_first) + 1) {
         x = x + 1
       }
       ## get maximum weekly mean temperature and minimum weekly mean temperature for cell
-      max_weekly_mean <- rbind(max_weekly_mean, c(lat[col], long[row], max(lt_weekly_means[row, col,], na.rm=TRUE)))
-      min_weekly_mean <- rbind(min_weekly_mean, c(lat[col], long[row],  min(lt_weekly_means[row, col,], na.rm=TRUE)))
+      max <- max(lt_weekly_means[row, col,], na.rm=TRUE)
+      min <- min(lt_weekly_means[row, col,], na.rm=TRUE)
       
+      ## get dormancy max and mins for cell:
+      ## for simplicity, 1 month = 4 weeks
+      h_d_max.3 <- max(sort(lt_weekly_means[row, col, ])[1:40], na.rm=TRUE)
+      h_d_max.2 <- max(sort(lt_weekly_means[row, col, ])[1:44], na.rm=TRUE)
+      h_d_max.1 <- max(sort(lt_weekly_means[row, col, ])[1:48], na.rm=TRUE)
+      
+      c_d_min.3 <- min(sort(lt_weekly_means[row, col, ])[13:52], na.rm=TRUE) 
+      c_d_min.2 <- min(sort(lt_weekly_means[row, col, ])[9:52], na.rm=TRUE) 
+      c_d_min.1 <- min(sort(lt_weekly_means[row, col, ])[5:52], na.rm=TRUE) 
+      
+      max_weekly_mean[[element]] <- c(lat[col], long[row], max, h_d_max.3, h_d_max.2, h_d_max.1)
+      min_weekly_mean[[element]] <- c(lat[col], long[row],  min, c_d_min.3, c_d_min.2, c_d_min.1)
+      
+      element = element + 1
       col = col + 1
     }
   }
   row = row + 1
 }
 
-max_weekly_mean <- max_weekly_mean[-1,] %>%
-  select(longitude, latitude, seasonal_high_temp) %>%
-  mutate(longitude = ifelse(longitude < 180, longitude, longitude - 360))
+max_weekly_mean <- data.frame(do.call(rbind, max_weekly_mean), stringsAsFactors = FALSE) 
+colnames(max_weekly_mean) = c("latitude", "longitude", "seasonal_high_temp", 
+                              "hot_dormancy_3", "hot_dormancy_2", "hot_dormancy_1")
+max_weekly_mean <- mutate(max_weekly_mean, longitude = ifelse(longitude < 180, longitude,
+                                                              longitude - 360)) %>%
+  select(longitude, latitude, seasonal_high_temp, hot_dormancy_1, hot_dormancy_2, hot_dormancy_3)
 
-min_weekly_mean <- min_weekly_mean[-1,] %>%
-  select(longitude, latitude, seasonal_low_temp) %>%
-  mutate(longitude = ifelse(longitude < 180, longitude, longitude - 360))
+min_weekly_mean <- data.frame(do.call(rbind, min_weekly_mean), stringsAsFactors = FALSE) 
+colnames(min_weekly_mean) = c("latitude", "longitude", "seasonal_low_temp",
+                              "cold_dormancy_3", "cold_dormancy_2", "cold_dormancy_1")
+min_weekly_mean <- mutate(min_weekly_mean, longitude = ifelse(longitude < 180, longitude, 
+                                                              longitude - 360)) %>%
+  select(longitude, latitude, seasonal_low_temp, cold_dormancy_1, cold_dormancy_2, cold_dormancy_3)
+  
 
 
 ## save these datasets as seasonal high and low temps

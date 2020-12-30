@@ -1,5 +1,6 @@
 ## for  cleaning and manipulating the traits database 
 library(tidyverse)
+library(sf)
 
 ## read in all traits
 traits_all <- read_csv("data-raw/globtherm_traits_collated_180617.csv") %>%
@@ -19,12 +20,12 @@ types <- new_infos %>%
 
 types <- aggregate(types$type, list(types$genus_species), paste, collapse = ", ") %>%
   rename("genus_species" = Group.1, "limit_type" = x)
-  
+
 new_infos <- new_infos %>%
   select(-type) %>%
   filter(!duplicated(genus_species)) %>%
   left_join(., types, by = "genus_species") 
-  
+
 ## subset to only ectotherm species for which we have thermal limits and range
 traits_sub <- traits_all[traits_all$genus_species %in% thermal_limits$genus_species,]
 
@@ -78,11 +79,11 @@ dormancy_sub <- traits_sub %>%
                                        "No", ifelse(str_detect(cold_season_dormancy, "Y"), 
                                                     "Yes", cold_season_dormancy)
                                        
-                                       )) %>%
+  )) %>%
   mutate(hot_season_dormancy = ifelse(str_detect(hot_season_dormancy, "N") | 
                                         str_detect(hot_season_dormancy, "no"), 
                                       "No", hot_season_dormancy))
-  
+
 
 unique(dormancy_sub$cold_season_dormancy)
 unique(dormancy_sub$hot_season_dormancy)
@@ -90,3 +91,55 @@ unique(dormancy_sub$hot_season_dormancy)
 ## check how many are yes and no
 length(which(dormancy_sub$cold_season_dormancy == "Yes")) ## 39/141 
 length(which(dormancy_sub$hot_season_dormancy == "Yes")) ## 0/141
+
+## check how many of those are terrestrial
+terr_sub <- dormancy_sub %>%
+  filter(Realm == "Terrestrial") 
+
+length(which(terr_sub$cold_season_dormancy == "Yes")) ## 39/112, all of them!
+
+
+
+
+
+## plot dormancy Y/N against realized range latitudinal midpoint (should end up with 141 species)
+realized_ranges <- st_read("data-processed/realized-ranges_split.shp")
+
+lat_mps <- realized_ranges %>%
+  filter(!duplicated(species)) %>%
+  mutate(species = str_replace_all(species, " ", "_")) %>%
+  filter(species %in% dormancy_sub$genus_species) %>%  ## have 140 since 1 species is duplicated in traits data... oops
+  as.data.frame(.) %>%
+  select(species, lttdnl_) %>%
+  rename("lat_mp" = lttdnl_)
+  
+dormancy_sub <- left_join(dormancy_sub, lat_mps, by = c("genus_species" = "species"))
+
+dormancy_sub %>%
+  ggplot(., aes(x = abs(lat_mp), y = cold_season_dormancy, col = Order)) + geom_point() ## very interesting.... seems like they are all squamata
+
+unique(dormancy_sub$Order[which(dormancy_sub$cold_season_dormancy == "Yes")]) ## it is true!
+
+## now look at only squamata: 
+dormancy_sub %>%
+  filter(Order == "Squamata") %>% ## 41/111 squamata species are dormant in the cold seasons
+  ggplot(., aes(x = abs(lat_mp), y = cold_season_dormancy, col = Order)) + geom_point()
+
+## are these the ones with overfilling? look at range maps
+
+## print out names 
+dormancy_sub %>%
+  filter(Order == "Squamata")  %>%
+  filter(cold_season_dormancy == "Yes") %>%
+  .$genus_species
+
+
+## look at intratherm to see when Squamata species go dormant (if we know this) and for how long
+intra_traits <- read.csv("~/Documents/intra-therm/data-processed/intratherm-may-2020-squeaky-clean.csv")
+
+squamata <- intra_traits %>%
+  filter(order == "Squamata") %>%
+  filter(!duplicated(genus_species)) ## 6 species of order squamata
+
+## look at dormancy:
+squamata$season_inactive

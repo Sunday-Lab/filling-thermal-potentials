@@ -25,42 +25,42 @@ terr_seasonal_high <- read.csv("data-processed/terrestrial_seasonal-max-temps.cs
 terr_seasonal_low <- read.csv("data-processed/terrestrial_seasonal-min-temps.csv")
 
 ## rasterize:
-raster_terr_high <- rasterize(terr_seasonal_high[, 1:2], r, terr_seasonal_high[,3], fun=mean) 
+raster_terr_high <- rasterize(terr_seasonal_high[, 1:2], r, terr_seasonal_high[,3:6], fun=mean) 
 raster_terr_high[is.infinite(raster_terr_high)] <- NA
-names(raster_terr_high) <- "seasonal_high_temp"
+names(raster_terr_high) <- c("seasonal_high_temp", "hot_dormancy_3", "hot_dormancy_2", "hot_dormancy_1")
 ##plot(raster_terr_high, asp = 1)
 
-raster_terr_low <- rasterize(terr_seasonal_low[, 1:2], r, terr_seasonal_low[,3], fun=mean)
+raster_terr_low <- rasterize(terr_seasonal_low[, 1:2], r, terr_seasonal_low[,3:6], fun=mean)
 raster_terr_low[is.infinite(raster_terr_low)] <- NA
-names(raster_terr_low) <- "seasonal_low_temp"
+names(raster_terr_low) <- c("seasonal_low_temp",  "cold_dormancy_3", "cold_dormancy_2", "cold_dormancy_1")
 ##plot(raster_terr_low, asp = 1)
 
 ## write out mask layer for use in restricting realized ranges:
 raster_terr_mask <- raster_terr_low
 raster_terr_mask[!is.na(raster_terr_mask)] = 1
 ##plot(raster_terr_mask, asp = 1)
-writeRaster(raster_terr_mask, "./data-processed/raster_terr_mask.nc")
+writeRaster(raster_terr_mask, "./data-processed/raster_terr_mask.nc", overwrite = TRUE)
 
 ## read in seasonal high and low temp data:
 marine_seasonal_high <- read.csv("data-processed/marine_seasonal-max-temps.csv") 
 marine_seasonal_low <- read.csv("data-processed/marine_seasonal-min-temps.csv")
 
 ## rasterize:
-raster_marine_high <- rasterize(marine_seasonal_high[, 1:2], r, marine_seasonal_high[,3], fun=mean)
+raster_marine_high <- rasterize(marine_seasonal_high[, 1:2], r, marine_seasonal_high[,3:6], fun=mean)
 raster_marine_high[is.infinite(raster_marine_high)] <- NA
-names(raster_marine_high) <- "seasonal_high_temp"
+names(raster_marine_high) <-  c("seasonal_high_temp", "hot_dormancy_3", "hot_dormancy_2", "hot_dormancy_1")
 ##plot(raster_marine_high, asp = 1)
 
-raster_marine_low <- rasterize(marine_seasonal_low[, 1:2], r, marine_seasonal_low[,3], fun=mean)
+raster_marine_low <- rasterize(marine_seasonal_low[, 1:2], r, marine_seasonal_low[,3:6], fun=mean)
 raster_marine_low[is.infinite(raster_marine_low)] <- NA
-names(raster_marine_low) <- "seasonal_low_temp"
+names(raster_marine_low) <-  c("seasonal_low_temp",  "cold_dormancy_3", "cold_dormancy_2", "cold_dormancy_1")
 ##plot(raster_marine_low, asp = 1)
 
 ## write out mask layer for use in restricting realized ranges:
 raster_marine_mask <- raster_marine_low
 raster_marine_mask[!is.na(raster_marine_mask)] = 1
 ##plot(raster_marine_mask, asp = 1)
-writeRaster(raster_marine_mask, "./data-processed/raster_marine_mask.nc")
+writeRaster(raster_marine_mask[[1]], "./data-processed/raster_marine_mask.nc", overwrite = TRUE)
 
 
 ## create intertidal temperature data:
@@ -77,7 +77,7 @@ st_crs(smooth) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84
 ## plot(st_geometry(smooth), axes = TRUE) 
 
 ## create buffer around intertidal area into sea and onto land
-buffer_sea <- st_buffer(smooth, dist = 1)
+buffer_sea <- st_buffer(smooth, dist = 2)
 buffer_land <- st_buffer(smooth, dist = -1)
 ##plot(st_geometry(buffer_sea))
 ##plot(st_geometry(buffer_land))
@@ -98,15 +98,79 @@ intertidal_land_low <- raster_terr_low %>%
 ## combine land and sea temperatures, giving priority to sea temperatures 
 raster_intertidal_high <- merge(intertidal_sea_high, intertidal_land_high)
 raster_intertidal_low <- merge(intertidal_sea_low, intertidal_land_low)
+names(raster_intertidal_high) <- c("seasonal_high_temp", "hot_dormancy_3", "hot_dormancy_2", "hot_dormancy_1")
+names(raster_intertidal_low) <-  c("seasonal_low_temp",  "cold_dormancy_3", "cold_dormancy_2", 
+                                   "cold_dormancy_1")
 ##plot(raster_intertidal_high)
 ##plot(raster_intertidal_low)
+
 
 ## write out mask layer for use in restricting realized ranges:
 raster_intertidal_mask <- raster_intertidal_low
 raster_intertidal_mask[!is.na(raster_intertidal_mask)] = 1
 ##plot(raster_intertidal_mask, asp = 1)
-writeRaster(raster_intertidal_mask, "./data-processed/raster_intertidal_mask.nc")
+writeRaster(raster_intertidal_mask[[1]], "./data-processed/raster_intertidal_mask.nc", overwrite = TRUE)
 
+
+####################################################################################
+#####                   RASTERIZE REALIZED RANGES                             ######
+####################################################################################
+## read in realized ranges:
+realized_ranges <- st_read("data-processed/realized-ranges_unsplit.shp") %>%
+  mutate(range_id = paste(species, source, sep = "_"))
+split_realized_ranges <- st_read("data-processed/realized-ranges_split.shp")
+
+
+## constrain realized range rasters by habitat allowed to be in the potential range
+r <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, 
+            crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"),
+            res = 1)
+
+## read in realm mask layers:
+t_mask <- raster("./data-processed/raster_terr_mask.nc")
+m_mask <- raster("./data-processed/raster_marine_mask.nc")
+i_mask <- raster("./data-processed/raster_intertidal_mask.nc")
+
+i = 1
+while (i < nrow(realized_ranges)+1) {
+  ## for ranges that are very complex and take forevvvvver to rasterize, simplify first:
+  if (i %in% c(100, 173, 190, 191, 192, 196, 197, 198, 199, 205, 206, 209, 225, 229, 426, 524)) {
+    range <- ms_simplify(realized_ranges[i, ], keep_shapes = TRUE)
+  }
+  else {
+    range <- realized_ranges[i, ]
+  }
+  rr_raster <- rasterize(range, r, background = NA, getCover = TRUE)
+  rr_raster[rr_raster > 0] <- 1 ## set all values that overlapped range in raster to 1
+  rr_raster[rr_raster != 1] <- NA ## set all other values to NA
+  
+  ## constrain by habitat:
+  if(range$realm == "Terrestrial") {
+    rr_raster <- mask(rr_raster,t_mask, updatevalue = NA, maskvalue = 1, inverse = TRUE) ## set cells the mask that do not overlap realized range to NA
+  }
+  else if(range$realm == "Marine") {
+    rr_raster <- mask(rr_raster, m_mask, updatevalue = NA, maskvalue = 1,inverse = TRUE) 
+  }
+  else {
+    rr_raster <- mask(rr_raster, i_mask, updatevalue = NA, maskvalue = 1, inverse = TRUE) 
+  }
+  
+  ## add to list of rasters
+  if (i == 1) {
+    rasterized_rrs <- rr_raster
+  }
+  else {
+    rasterized_rrs <- addLayer(rasterized_rrs, rr_raster, updatevalue = NA)
+  }
+  
+  print(paste("Finished range number:", i))
+  i = i + 1
+}
+
+names(rasterized_rrs) <- realized_ranges$range_id
+
+##saveRDS(rasterized_rrs, "data-processed/rasterized_rrs.rds")
+rasterized_rrs <- readRDS("data-processed/rasterized_rrs.rds")
 
 
 ####################################################################################
@@ -116,9 +180,11 @@ writeRaster(raster_intertidal_mask, "./data-processed/raster_intertidal_mask.nc"
 thermal_limits <- read.csv("data-processed/thermal-limits_ectotherms-with-ranges.csv") %>%
   mutate(genus_species = paste(Genus, Species, sep = " "))
 
-## read in realized ranges:
-realized_ranges <- st_read("data-processed/realized-ranges_unsplit.shp")
-split_realized_ranges <- st_read("data-processed/realized-ranges_split.shp")
+## read in species traits:
+traits <- read.csv("./data-processed/globtherm_traits_collated_180617_ectotherms-with-limits_filled.csv") %>%
+  mutate(genus_species = str_replace_all(.$genus_species, "_", " "))
+colnames(traits) <- str_replace_all(colnames(traits), pattern = "\\.", "_")
+colnames(traits) <- str_replace_all(colnames(traits), pattern = "\\__", "_")
 
 #######################################################
 #####   TERRESTRIAL AND FRESHWATER SPECIES:      ######
@@ -137,7 +203,7 @@ only_upper <- upper_limits[!upper_limits$genus_species %in% lower_limits$genus_s
 only_lower <- lower_limits[!lower_limits$genus_species %in% upper_limits$genus_species,]
 
 ## clump contiguous habitat together:
-clumped_temps <- raster_terr_high %>%
+clumped_temps <- raster_terr_high[[1]] %>%
   clump(., directions = 8) %>%
   rasterToPolygons(., dissolve = TRUE) %>%
   st_as_sf()
@@ -145,32 +211,41 @@ plot(clumped_temps)
 
 ## SPEICES WITH BOTH THERMAL LIMITS:
 ####################################=
-combined = filter_by_tolerance_both(both_upper = both_upper, 
+combined <- filter_by_tolerance_both(both_upper = both_upper, 
                                     both_lower = both_lower, 
                                     raster_high = raster_terr_high, 
                                     raster_low = raster_terr_low)
+
+combined_dormancy <- filter_by_tolerance_with_dormancy(both_upper = both_upper, 
+                                                       both_lower = both_lower, 
+                                                       raster_high = raster_terr_high, 
+                                                       raster_low = raster_terr_low)
 plot(combined)
+plot(combined_dormancy)
 
 ## restrict range to contiguous habitat that begins at the species realized range:
-##plot_ranges(clumped_temps = clumped_temps, realized_ranges = realized_ranges, combined = combined)
 prs_terrestrial <- create_potential_ranges(clumped_temps = clumped_temps, 
                                            realized_ranges = realized_ranges, combined = combined)
+prs_terrestrial_dormancy <- create_potential_ranges(clumped_temps = clumped_temps, 
+                                           realized_ranges = realized_ranges, combined = combined_dormancy)
+
+##saveRDS(prs_terrestrial_dormancy, "./data-processed/prs_terrestrial_dormancy.rds")
+prs_terrestrial_dormancy <- readRDS("./data-processed/prs_terrestrial_dormancy.rds")
 
 ## SPECIES WITH ONLY ONE THERMAL LIMIT:
 #######################################
-high_filtered <- filter_by_tolerance_upper(only_upper = only_upper, 
-                                           raster_high = raster_terr_high)
-plot(high_filtered)
-low_filtered <- filter_by_tolerance_lower(only_lower = only_lower, 
-                                          raster_low = raster_terr_low)
-plot(low_filtered)
-
-## restrict range to contiguous habitat that begins at the species realized range:
-## plot_ranges_one_limit(clumped_temps = clumped_temps, realized_ranges = realized_ranges,high_filtered = terr_high,  low_filtered = terr_low)
-prs_terrestrial_one_limit <- create_potential_ranges_one_limit(clumped_temps = clumped_temps, 
-                                                               realized_ranges = realized_ranges,
-                                                               high_filtered = high_filtered,  
-                                                               low_filtered = low_filtered)
+# high_filtered <- filter_by_tolerance_upper(only_upper = only_upper, 
+#                                            raster_high = raster_terr_high)
+# plot(high_filtered)
+# low_filtered <- filter_by_tolerance_lower(only_lower = only_lower, 
+#                                           raster_low = raster_terr_low)
+# plot(low_filtered)
+# 
+# ## restrict range to contiguous habitat that begins at the species realized range:
+# prs_terrestrial_one_limit <- create_potential_ranges_one_limit(clumped_temps = clumped_temps, 
+#                                                                realized_ranges = realized_ranges,
+#                                                                high_filtered = high_filtered,  
+#                                                                low_filtered = low_filtered)
 
 
 
@@ -191,7 +266,7 @@ only_upper <- upper_limits[!upper_limits$genus_species %in% lower_limits$genus_s
 only_lower <- lower_limits[!lower_limits$genus_species %in% upper_limits$genus_species,]
 
 ## clump contiguous habitat together:
-clumped_temps <- raster_marine_high %>%
+clumped_temps <- raster_marine_high[[1]] %>%
   clump(., directions = 8) %>%
   rasterToPolygons(., dissolve = TRUE) %>%
   st_as_sf()
@@ -206,25 +281,23 @@ combined <- filter_by_tolerance_both(both_upper = both_upper,
 plot(combined)
 
 ## restrict range to contiguous habitat that begins at the species realized range:
-##plot_ranges(clumped_temps = clumped_temps, realized_ranges = realized_ranges, combined = combined)
 prs_marine <- create_potential_ranges(clumped_temps = clumped_temps, 
                                       realized_ranges = realized_ranges, combined = combined)
 
 ## SPECIES WITH ONLY ONE THERMAL LIMIT:
 #######################################
-high_filtered <- filter_by_tolerance_upper(only_upper = only_upper,
-                                           raster_high = raster_marine_high)
-plot(high_filtered)
-low_filtered <- filter_by_tolerance_lower(only_lower = only_lower,
-                                          raster_low = raster_marine_low)
-plot(low_filtered)
-
-## restrict range to contiguous habitat that begins at the species realized range:
-##plot_ranges_one_limit(clumped_temps = clumped_temps, realized_ranges = realized_ranges, high_filtered = marine_high,  low_filtered = marine_low)
-prs_marine_one_limit <- create_potential_ranges_one_limit(clumped_temps = clumped_temps, 
-                                                          realized_ranges = realized_ranges, 
-                                                          high_filtered = high_filtered,  
-                                                          low_filtered = low_filtered)
+# high_filtered <- filter_by_tolerance_upper(only_upper = only_upper,
+#                                            raster_high = raster_marine_high)
+# plot(high_filtered)
+# low_filtered <- filter_by_tolerance_lower(only_lower = only_lower,
+#                                           raster_low = raster_marine_low)
+# plot(low_filtered)
+# 
+# ## restrict range to contiguous habitat that begins at the species realized range:
+# prs_marine_one_limit <- create_potential_ranges_one_limit(clumped_temps = clumped_temps, 
+#                                                           realized_ranges = realized_ranges, 
+#                                                           high_filtered = high_filtered,  
+#                                                           low_filtered = low_filtered)
 
 
 ######################################################
@@ -244,7 +317,7 @@ only_upper <- upper_limits[!upper_limits$genus_species %in% lower_limits$genus_s
 only_lower <- lower_limits[!lower_limits$genus_species %in% upper_limits$genus_species,]
 
 ## clump contiguous habitat together:
-clumped_temps <- raster_intertidal_high %>%
+clumped_temps <- raster_intertidal_high[[1]] %>%
   clump(., directions = 8) %>%
   rasterToPolygons(., dissolve = TRUE) %>%
   st_as_sf()
@@ -259,36 +332,37 @@ combined <- filter_by_tolerance_both(both_upper = both_upper,
 plot(combined)
 
 ## restrict range to contiguous habitat that begins at the species realized range:
-##plot_ranges(clumped_temps = clumped_temps, realized_ranges = realized_ranges, combined = combined)
 prs_intertidal <- create_potential_ranges(clumped_temps = clumped_temps, 
                                           realized_ranges = realized_ranges, combined = combined)
 
 ## SPECIES WITH ONLY ONE THERMAL LIMIT:
 #######################################
-high_filtered <- filter_by_tolerance_upper(only_upper = only_upper,
-                                           raster_high = raster_intertidal_high)
-plot(high_filtered)
-low_filtered <- filter_by_tolerance_lower(only_lower = only_lower,
-                                          raster_low = raster_intertidal_low)
-plot(low_filtered)
-
-## restrict range to contiguous habitat that begins at the species realized range:
-##plot_ranges_one_limit(clumped_temps = clumped_temps, realized_ranges = realized_ranges, high_filtered = intertidal_high,  low_filtered = intertidal_low)
-prs_intertidal_one_limit <- create_potential_ranges_one_limit(clumped_temps = clumped_temps, 
-                                                              realized_ranges = realized_ranges, 
-                                                              high_filtered = high_filtered,  
-                                                              low_filtered = low_filtered)
+# high_filtered <- filter_by_tolerance_upper(only_upper = only_upper,
+#                                            raster_high = raster_intertidal_high)
+# plot(high_filtered)
+# low_filtered <- filter_by_tolerance_lower(only_lower = only_lower,
+#                                           raster_low = raster_intertidal_low)
+# plot(low_filtered)
+# 
+# ## restrict range to contiguous habitat that begins at the species realized range:
+# prs_intertidal_one_limit <- create_potential_ranges_one_limit(clumped_temps = clumped_temps, 
+#                                                               realized_ranges = realized_ranges, 
+#                                                               high_filtered = high_filtered,  
+#                                                               low_filtered = low_filtered)
 
 
 ########################################################
 ##      COLLATING POTENTIAL RANGES ACROSS REALMS     ###
 ########################################################
 potential_ranges_both_limits <- stack(prs_terrestrial, prs_marine, prs_intertidal)
+potential_ranges_both_limits_dormancy <- stack(prs_terrestrial_dormancy, prs_marine, prs_intertidal)
 ##saveRDS(potential_ranges_both_limits, "data-processed/potential_ranges.rds")
 ##saveRDS(potential_ranges_both_limits, "data-processed/potential_ranges_notcutatequator.rds")
+##saveRDS(potential_ranges_both_limits_dormancy, "data-processed/potential_ranges_notcutatequator_dormancy.rds")
 
-potential_ranges_one_limit <- stack(prs_terrestrial_one_limit, prs_marine_one_limit, 
-                                    prs_intertidal_one_limit)
+
+#potential_ranges_one_limit <- stack(prs_terrestrial_one_limit, prs_marine_one_limit, 
+#                                    prs_intertidal_one_limit)
 ##saveRDS(potential_ranges_one_limit, "data-processed/potential_ranges_one_limit_coldwarm.rds")
 
 
@@ -341,6 +415,99 @@ filter_by_tolerance_both <- function(both_upper,
   }
   names(combined) <- paste(both_upper$Genus, both_upper$Species, sep = "_")
   ##plot(combined)
+  
+  return (combined)
+}
+
+filter_by_tolerance_with_dormancy <- function(both_upper, 
+                                                   both_lower, 
+                                                   raster_high, 
+                                                   raster_low) {
+  ## create an individual raster layer of difference between thermal limit and seasonal temperature for each species 
+  high <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, 
+                 crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
+  low <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, 
+                crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
+  species = 1
+  high_names <- c()
+  low_names <- c()
+  tracker <- c()
+  while (species < nrow(both_upper) + 1) {
+    species_traits <- traits[which(traits$genus_species == both_upper$genus_species[species]),]
+    
+    if (species_traits$cold_season_dormancy_ == "Y" & species_traits$hot_season_dormancy_ == "Y") {
+      high <- addLayer(high, raster_high[[1:4]] - both_upper$thermal_limit[species]) 
+      low <- addLayer(low, raster_low[[1:4]] - both_lower$thermal_limit[species]) 
+      high_names <- append(high_names, paste(paste(species_traits$Genus, species_traits$Species, sep = "_"),
+                                             rep(0:3), "months_both_dormancy", sep = "_"))
+      low_names <- append(low_names, paste(paste(species_traits$Genus, species_traits$Species, sep = "_"),
+                                           rep(0:3), "months_both_dormancy", sep = "_"))
+      tracker <- append(tracker, rep("both", 4))
+    }
+    else if (species_traits$cold_season_dormancy_ == "Y") {
+      high <- addLayer(high, raster_high[[1]] - both_upper$thermal_limit[species]) 
+      high <- addLayer(high, raster_high[[1]] - both_upper$thermal_limit[species]) 
+      high <- addLayer(high, raster_high[[1]] - both_upper$thermal_limit[species]) 
+      high <- addLayer(high, raster_high[[1]] - both_upper$thermal_limit[species]) 
+      low <- addLayer(low, raster_low[[1:4]] - both_lower$thermal_limit[species]) 
+      high_names <- append(high_names, rep(paste(species_traits$Genus, species_traits$Species, 
+                                             "no_hot_dormancy", sep = "_"), 4))
+      low_names <- append(low_names, paste(paste(species_traits$Genus, species_traits$Species, sep = "_"),
+                                            rep(0:3), "months_cold_dormancy", sep = "_"))
+      tracker <- append(tracker, rep("cold", 4))
+    }
+    else if (species_traits$hot_season_dormancy_ == "Y") {
+      high <- addLayer(high, raster_high[[1:4]] - both_upper$thermal_limit[species]) 
+      low <- addLayer(low, raster_low[[1]] - both_lower$thermal_limit[species])
+      low <- addLayer(low, raster_low[[1]] - both_lower$thermal_limit[species])
+      low <- addLayer(low, raster_low[[1]] - both_lower$thermal_limit[species])
+      low <- addLayer(low, raster_low[[1]] - both_lower$thermal_limit[species]) 
+      high_names <- append(high_names, paste(paste(species_traits$Genus, species_traits$Species, sep = "_"),
+                                            rep(0:3), "months_hot_dormancy", sep = "_"))
+      low_names <- append(low_names, rep(paste(species_traits$Genus, species_traits$Species, "no_cold_dormancy",
+                                           sep = "_"),4))
+      tracker <- append(tracker, rep("hot", 4))
+    }
+    else {
+      high <- addLayer(high, raster_high[[1]] - both_upper$thermal_limit[species]) 
+      low <- addLayer(low, raster_low[[1]] - both_lower$thermal_limit[species]) 
+      high_names <- append(high_names, paste(species_traits$Genus, species_traits$Species, 
+                                             "no_dormancy", sep = "_"))
+      low_names <- append(low_names, paste(species_traits$Genus, species_traits$Species, "no_dormancy",
+                                           sep = "_"))
+      tracker <- append(tracker, "neither")
+    }
+    
+    species = species + 1
+  }
+  
+  ## exclude raster cells outside of the thermal tolerance (where seasonal_high - Tmax < 0 and where seasonal_low - Tmin < 0)
+  high[high > 0] <- NA
+  low[low < 0] <- NA
+  names(high) <- high_names
+  names(low) <- low_names
+  ##plot(high)
+  ##plot(high)
+  
+  ## combine to find cells where seasonal high temp is less than CTmax and seasonal low temp is greater than CTmin 
+  combined <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, 
+                     crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
+  c_names <- c()
+  i = 1  
+  while (i < nrow(both_upper) + 1) {
+    combined <- addLayer(combined, mask(high[[i]], low[[i]]), updatevalue = NA)
+    c_names <- append(c_names, ifelse(tracker[i] == "both", high_names[i],
+                                      ifelse(tracker[i] == "cold", low_names[i], 
+                                             ifelse(tracker[i] == "hot", high_names[i],
+                                                    ifelse(tracker[i] == "neither", low_names,
+                                                           "oop")))))
+    i = i + 1
+  }
+  names(combined) <- c_names
+  ##plot(combined)
+  
+  combined <- combined[[which(!duplicated(c_names))]]
+  ## subset to only unique layers 
   
   return (combined)
 }
@@ -411,7 +578,13 @@ create_potential_ranges <- function (clumped_temps,
     
     ## get realized range
     species <- names(potential_raster) %>%
-      str_replace_all("_", " ")
+      str_replace_all("_", " ") 
+    
+    if(str_detect(species, "dormancy") ==  TRUE) {
+      split <- str_split_fixed(species, " ", n = 3)
+      
+      species <- paste(split[1,1], split[1,2], sep = " ")
+    }
     
     realized_range <- realized_ranges[which(as.character(realized_ranges$species) %in% species),] %>%
       st_transform_proj(crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0")
@@ -473,7 +646,7 @@ create_potential_ranges <- function (clumped_temps,
       ##plot(potential_range,  add=TRUE, col = "yellow")
       
       pr_restricted_all <- addLayer(pr_restricted_all, pr_restricted, updatevalue = NA)
-      names <- append(names, paste(species, realized_range$source[num], sep = "_"))
+      names <- append(names, paste(names(potential_raster), realized_range$source[num], sep = "_"))
       num = num + 1
     }
     
@@ -684,6 +857,75 @@ create_potential_ranges_one_limit <- function (clumped_temps,
 }
 
 
+## plots 
+plot_ranges_overlap  <- function (potential_ranges) {
+  rasterized_rrs <- readRDS("data-processed/rasterized_rrs.rds")
+  rrs <- as.data.frame(rasterized_rrs, xy=TRUE)
+  colnames(rrs)[1:2] <- c("longitude", "latitude")
+  prs <- as.data.frame(potential_ranges, xy=TRUE)
+  colnames(prs)[1:2] <- c("longitude", "latitude")
+  
+  
+  ## ggplots of all:
+  i = 1
+  while (i < ncol(prs) - 1) {
+    range <- colnames(prs)[i+2]
+    
+    ## get realized range:
+    species <- range %>%
+      str_replace_all("_", ".")
+    
+    if(str_detect(species, "dormancy") ==  TRUE) {
+      split <- str_split_fixed(range, "\\_", n = 7)
+      source <- split[1,7]
+      species <- paste(split[1,1], split[1,2], sep = ".")
+    } 
+    else {
+      split <- str_split_fixed(range, "\\_", n = 3)
+      source <- split[1,3]
+      species <- paste(split[1,1], split[1,2], sep = ".")
+    }
+    
+    rr_index <- which(str_detect(colnames(rrs), species) & str_detect(colnames(rrs), source))
+    
+    r <- rrs[,c(1:2, rr_index)] 
+    colnames(r)[3] <- "rr"
+    r <- left_join(r, prs[,c(1:2, which(colnames(prs) == range))]) 
+    colnames(r)[4] <- "pr"
+    
+    r_gg <- r %>%
+      ggplot(., aes(x = longitude, y = latitude)) +
+      xlim(-180, 180) + ylim(-90,90) + coord_fixed(ratio = 1) +
+      geom_raster(aes(fill=as.factor(rr))) + 
+      scale_fill_manual(values = c("yellow"), aesthetics = 'fill', labels = ) +
+      annotate(geom="raster", x=r$longitude, y=r$latitude, alpha=.6,
+               fill = r$pr) +
+      labs(title = range,
+           y = "Latitude",
+           x = "Longitude") +
+      scale_x_continuous(breaks = c(-180,-120,-60,0,60,120,180), expand = c(0.01,0.01)) +
+      scale_y_continuous(breaks = c(-90,-60,-30,0,30,60,90), expand = c(0.01,0.01)) +
+      annotate(geom="text", label = stats$equ_op, x = -180, y = -100) +
+      theme(legend.position = "none")
+    
+    
+    ## write to file:
+    ggsave(r_gg, path = "figures/range-plots/", 
+           filename = paste(range, ".png",sep = "_"), 
+           height = 6, width = 10, units = "in", device = "png")
+    
+    i = i + 1
+  }
+  
+}
+
+
+
+
+
+
+
+### garbage ####
 ## writes plots of realized range and restricted potential range to files for species with both thermal limits 
 plot_ranges <- function (clumped_temps, 
                          combined, 
@@ -701,6 +943,12 @@ plot_ranges <- function (clumped_temps,
     species <- names(potential_range) %>%
       str_replace_all("_", " ")
     
+    if(str_detect(species, "dormancy") ==  TRUE) {
+      split <- str_split_fixed(species, " ", n = 3)
+      
+      species <- paste(split[1,1], split[1,2], sep = " ")
+    }
+    
     realized_range <- realized_ranges[which(as.character(realized_ranges$species) %in% species),] %>%
       st_transform_proj(crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0")
     
@@ -717,6 +965,7 @@ plot_ranges <- function (clumped_temps,
     else {
       sub_potential <- potential_raster[which(intersects_potential == TRUE, arr.ind=TRUE)[,2],]
     }
+    
     
     plot(st_geometry(clumped_temps), main = paste(names(potential_range), 
                                                   " - realized range", sep = ""))
@@ -842,5 +1091,3 @@ plot_ranges_one_limit <- function (clumped_temps,
     i = i + 1
   }
 }
-
-
