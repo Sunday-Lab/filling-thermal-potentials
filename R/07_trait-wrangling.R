@@ -134,12 +134,71 @@ dormancy_sub %>%
   .$genus_species
 
 
-## look at intratherm to see when Squamata species go dormant (if we know this) and for how long
-intra_traits <- read.csv("~/Documents/intra-therm/data-processed/intratherm-may-2020-squeaky-clean.csv")
 
-squamata <- intra_traits %>%
-  filter(order == "Squamata") %>%
-  filter(!duplicated(genus_species)) ## 6 species of order squamata
 
-## look at dormancy:
-squamata$season_inactive
+## updated traits:
+new_traits <- read.csv("./data-processed/globtherm_traits_collated_180617_ectotherms-with-limits_filled.csv") %>%
+  mutate(genus_species = str_replace_all(.$genus_species, "_", " "))
+colnames(new_traits) <- str_replace_all(colnames(new_traits), pattern = "\\.", "_")
+colnames(new_traits) <- str_replace_all(colnames(new_traits), pattern = "\\__", "_")
+
+
+dormancy_sub <- new_traits %>%
+  filter(limit_type == "max, min") %>%
+  filter(!is.na(cold_season_dormancy_) & !is.na(hot_season_dormancy_)) %>%
+  mutate(cold_season_dormancy_ = ifelse(str_detect(cold_season_dormancy_, "N") | 
+                                         str_detect(cold_season_dormancy_, "no"), 
+                                       "No", ifelse(str_detect(cold_season_dormancy_, "Y"), 
+                                                    "Yes", cold_season_dormancy_))) %>%
+  mutate(hot_season_dormancy_ = ifelse(str_detect(hot_season_dormancy_, "N") | 
+                                        str_detect(hot_season_dormancy_, "no"), 
+                                      "No", ifelse(str_detect(hot_season_dormancy_, "Y"), 
+                                                   "Yes", hot_season_dormancy_)))
+
+
+unique(dormancy_sub$cold_season_dormancy_)
+unique(dormancy_sub$hot_season_dormancy_)
+
+## check how many are yes and no
+length(which(dormancy_sub$cold_season_dormancy_ == "Yes")) ## 119/186 
+length(which(dormancy_sub$hot_season_dormancy_ == "Yes")) ## 5/186
+
+lat_mps <- realized_ranges %>%
+  filter(!duplicated(species)) %>%
+  filter(species %in% dormancy_sub$genus_species) %>%  ## have 185 since 1 species is duplicated in traits data... oops
+  as.data.frame(.) %>%
+  select(species, lttdnl_) %>%
+  rename("lat_mp" = lttdnl_)
+
+dormancy_sub <- left_join(dormancy_sub, lat_mps, by = c("genus_species" = "species"))
+
+dormancy_sub %>%
+  ggplot(., aes(x = abs(lat_mp), y = cold_season_dormancy_, col = Order)) + geom_point() 
+
+unique(dormancy_sub$Order[which(dormancy_sub$cold_season_dormancy == "Yes")]) ## no longer all squamata!
+
+## now look at only squamata: 
+dormancy_sub %>%
+  filter(Order == "Squamata") %>%
+  ggplot(., aes(x = abs(lat_mp), y = cold_season_dormancy_, col = Order)) + geom_point()
+## more higher latitude species have "Yes" after updating 
+
+
+## look at logic for 'No' species above latitude 20 degrees.... did we guess these based on climate?
+dormancy_sub %>%
+  filter(Order == "Squamata") %>%
+  filter(cold_season_dormancy_ == "No", abs(lat_mp) > 20) %>%
+  select(source_logic_for_cold_season_dormancy) %>%
+  View(.)
+## about half have a sited source... leave for now
+
+
+## look at logic for 'Yes' species below latitude 20 degrees.... did we guess these based on climate?
+dormancy_sub %>%
+  filter(Order == "Squamata") %>%
+  filter(cold_season_dormancy_ == "Yes", abs(lat_mp) < 20) %>%
+  select(source_logic_for_cold_season_dormancy) %>%
+  View(.)
+## mostly guessed
+
+## come back with a more systematic way of classifying maybe...
