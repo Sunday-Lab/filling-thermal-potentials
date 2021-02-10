@@ -1,6 +1,7 @@
 library(ncdf4)
 library(tidyverse)
 library(raster)
+library(evobiR)
 select <- dplyr::select
 
 
@@ -145,23 +146,110 @@ while(row < nrow(mean_max) + 1) {
     max <- max(mean_max_new[row, col,], na.rm=TRUE)
     min <- min(mean_min_new[row, col,], na.rm=TRUE)
     
-    ## get dormancy max and mins for cell:
-    h_d_max.3 <- max(sort(mean_max_new[row, col, ])[1:275], na.rm=TRUE)
-    h_d_max.2 <- max(sort(mean_max_new[row, col, ])[1:305], na.rm=TRUE)
-    h_d_max.1 <- max(sort(mean_max_new[row, col, ])[1:335], na.rm=TRUE)
+    ## create df for temps and add column for month and month index
+    daily_highs <- data.frame(day = c(1:365), temp = mean_max_new[row, col,], 
+                              month = factor(c(rep("Jan", 31),
+                                        rep("Feb", 28),
+                                        rep("Mar", 31),
+                                        rep("Apr", 30),
+                                        rep("May", 31),
+                                        rep("Jun", 30),
+                                        rep("Jul", 31),
+                                        rep("Aug", 31),
+                                        rep("Sep", 30),
+                                        rep("Oct", 31),
+                                        rep("Nov", 30),
+                                        rep("Dec", 31)), levels = c("Jan", "Feb", "Mar",
+                                                                    "Apr", "May", "Jun",
+                                                                    "Jul", "Aug", "Sep", 
+                                                                    "Oct", "Nov", "Dec")), 
+                              month_index = c(rep(1, 31),
+                                              rep(2, 28),
+                                              rep(3, 31),
+                                              rep(4, 30),
+                                              rep(5, 31),
+                                              rep(6, 30),
+                                              rep(7, 31),
+                                              rep(8, 31),
+                                              rep(9, 30),
+                                              rep(10, 31),
+                                              rep(11, 30),
+                                              rep(12, 31)))
+    daily_lows <- daily_highs %>%
+      mutate(temp = mean_min_new[row, col,])
     
-    c_d_min.3 <- min(sort(mean_min_new[row, col, ])[91:365], na.rm=TRUE) 
-    c_d_min.2 <- min(sort(mean_min_new[row, col, ])[61:365], na.rm=TRUE) 
-    c_d_min.1 <- min(sort(mean_min_new[row, col, ])[31:365], na.rm=TRUE) 
+    ## get most extreme temperature high and low temp from each month, and create 'circular' data frame
+    monthly_highs <- daily_highs %>%
+      group_by(month) %>%
+      do(mutate(., temp = max(.$temp, na.rm = TRUE))) %>%
+      select(-day) %>%
+      unique(.) %>%
+      rbind(., .[1:6,])
+    
+    monthly_lows <- daily_lows %>%
+      group_by(month) %>%
+      do(mutate(., temp = min(.$temp, na.rm = TRUE))) %>%
+      select(-day) %>%
+      unique(.) %>%
+      rbind(., .[1:6,])
+    
+    ## find 6 months with the highest mean extreme daily high temp
+    sw_high <- SlidingWindow(monthly_highs$temp, window = 6, FUN = sum, step = 1)
+    
+    ## find 6 months with the lowest mean extreme daily low temp
+    sw_low <- SlidingWindow(monthly_lows$temp, window = 6, FUN = sum, step = 1)
+    
+    ## get index of months to block out
+    hot_start <- which(sw_high == max(sw_high))[1]
+    cold_start <- which(sw_low == min(sw_low))[1]
+    
+    hot_end <- hot_start + 5
+    cold_end <- cold_start + 5
+    
+    ## get month indecies to block out
+    if(hot_end > 12) {
+      hot_end = hot_end - 12
+      hot_indecies <- c(hot_start:12, 1:hot_end)
+    }
+    else {
+      hot_indecies <- c(hot_start:hot_end)
+    }
+    
+    if(cold_end > 12) {
+      cold_end = cold_end - 12
+      cold_indecies <- c(cold_start:12, 1:cold_end)
+    }
+    else {
+      cold_indecies <- c(cold_start:cold_end)
+    }
+    
+    ## block out temperatures in 6 hottest consecutive months and find max
+    h_d_max <- daily_highs %>%
+      filter(!month_index %in% hot_indecies) %>%
+      select(temp) %>%
+      max()
+    
+    ## block out temperatures in 6 coldest consecutive months and find min
+    c_d_min <- daily_lows %>%
+      filter(!month_index %in% cold_indecies) %>%
+      select(temp) %>%
+      min()
+    
+    ## get dormancy max and mins for cell after 6 consecutive months blocked:
+    # h_d_max.3 <- max(sort(mean_max_new[row, col, ])[1:275], na.rm=TRUE)
+    # h_d_max.2 <- max(sort(mean_max_new[row, col, ])[1:305], na.rm=TRUE)
+    # h_d_max.1 <- max(sort(mean_max_new[row, col, ])[1:335], na.rm=TRUE)
+    # 
+    # c_d_min.3 <- min(sort(mean_min_new[row, col, ])[91:365], na.rm=TRUE) 
+    # c_d_min.2 <- min(sort(mean_min_new[row, col, ])[61:365], na.rm=TRUE) 
+    # c_d_min.1 <- min(sort(mean_min_new[row, col, ])[31:365], na.rm=TRUE)
   
-    final_max[[element]] <- c(lat[col], long[row], max, h_d_max.3, h_d_max.2, h_d_max.1)
-    final_min[[element]] <- c(lat[col], long[row],  min, c_d_min.3, c_d_min.2, c_d_min.1)
     
-    ## block out temperatures in cold months
-    ## N hemisphere: Jan, Feb, March; S hemisphere: 
+    # final_max[[element]] <- c(lat[col], long[row], max, h_d_max.3, h_d_max.2, h_d_max.1)
+    # final_min[[element]] <- c(lat[col], long[row],  min, c_d_min.3, c_d_min.2, c_d_min.1)
     
-    ## block out temperatures in hot months
-    ## N hemisphere: June, July, August; S hemisphere: Jan, Feb, March
+    final_max[[element]] <- c(lat[col], long[row], max, h_d_max)
+    final_min[[element]] <- c(lat[col], long[row],  min, c_d_min)
     
     element = element + 1
     col = col + 1
@@ -171,20 +259,20 @@ while(row < nrow(mean_max) + 1) {
 
 final_max <- data.frame(do.call(rbind, final_max), stringsAsFactors = FALSE) 
 colnames(final_max) = c("latitude", "longitude", "seasonal_high_temp",
-                        "hot_dormancy_3", "hot_dormancy_2", "hot_dormancy_1")
+                        "hot_dormancy_6mo")
 final_max <- filter(final_max, !is.infinite(seasonal_high_temp)) %>%
-  select(longitude, latitude, seasonal_high_temp, hot_dormancy_1, hot_dormancy_2, hot_dormancy_3)
+  select(longitude, latitude, seasonal_high_temp, hot_dormancy_6mo)
 
 final_min <- data.frame(do.call(rbind, final_min), stringsAsFactors = FALSE) 
 colnames(final_min) = c("latitude", "longitude", "seasonal_low_temp",
-                        "cold_dormancy_3", "cold_dormancy_2", "cold_dormancy_1")
+                        "cold_dormancy_6mo")
 final_min <- filter(final_min, !is.infinite(seasonal_low_temp)) %>%
-  select(longitude, latitude, seasonal_low_temp, cold_dormancy_1, cold_dormancy_2, cold_dormancy_3)
+  select(longitude, latitude, seasonal_low_temp, cold_dormancy_6mo)
 
 
 ## save data:
-write.csv(final_max, "data-processed/terrestrial_seasonal-max-temps.csv", row.names = FALSE)
-write.csv(final_min, "data-processed/terrestrial_seasonal-min-temps.csv", row.names = FALSE)
+write.csv(final_max, "data-processed/terrestrial_seasonal-max-temps_6mo-dormancy.csv", row.names = FALSE)
+write.csv(final_min, "data-processed/terrestrial_seasonal-min-temps_6mo-dormancy.csv", row.names = FALSE)
 
 
 ####################################################################################
@@ -267,18 +355,67 @@ while (row < nrow(sst_first) + 1) {
       max <- max(lt_weekly_means[row, col,], na.rm=TRUE)
       min <- min(lt_weekly_means[row, col,], na.rm=TRUE)
       
+      ## create df for temps, create 'circular' data frame
+      weekly_temps <- data.frame(week = c(1:52), temp = lt_weekly_means[row, col,]) %>%
+        rbind(., .[1:24,])
+      
+      ## find 6 months with the highest mean extreme daily high temp
+      sw_high <- SlidingWindow(weekly_temps$temp, window = 24, FUN = sum, step = 4)
+      
+      ## find 6 months with the lowest mean extreme daily low temp
+      sw_low <- SlidingWindow(weekly_temps$temp, window = 24, FUN = sum, step = 4)
+      
+      ## get index of months to block out
+      hot_start <- which(sw_high == max(sw_high))[1]
+      cold_start <- which(sw_low == min(sw_low))[1]
+      
+      hot_end <- hot_start + 23
+      cold_end <- cold_start + 23
+      
+      ## get month indecies to block out
+      if(hot_end > 52) {
+        hot_end = hot_end - 52
+        hot_indecies <- c(hot_start:52, 1:hot_end)
+      }
+      else {
+        hot_indecies <- c(hot_start:hot_end)
+      }
+      
+      if(cold_end > 52) {
+        cold_end = cold_end - 52
+        cold_indecies <- c(cold_start:52, 1:cold_end)
+      }
+      else {
+        cold_indecies <- c(cold_start:cold_end)
+      }
+      
+      ## block out temperatures in 6 hottest consecutive months and find max
+      h_d_max <- weekly_temps %>%
+        filter(!week %in% hot_indecies) %>%
+        select(temp) %>%
+        max()
+      
+      ## block out temperatures in 6 coldest consecutive months and find min
+      c_d_min <- weekly_temps %>%
+        filter(!week %in% cold_indecies) %>%
+        select(temp) %>%
+        min()
+      
       ## get dormancy max and mins for cell:
       ## for simplicity, 1 month = 4 weeks
-      h_d_max.3 <- max(sort(lt_weekly_means[row, col, ])[1:40], na.rm=TRUE)
-      h_d_max.2 <- max(sort(lt_weekly_means[row, col, ])[1:44], na.rm=TRUE)
-      h_d_max.1 <- max(sort(lt_weekly_means[row, col, ])[1:48], na.rm=TRUE)
+      # h_d_max.3 <- max(sort(lt_weekly_means[row, col, ])[1:40], na.rm=TRUE)
+      # h_d_max.2 <- max(sort(lt_weekly_means[row, col, ])[1:44], na.rm=TRUE)
+      # h_d_max.1 <- max(sort(lt_weekly_means[row, col, ])[1:48], na.rm=TRUE)
+      # 
+      # c_d_min.3 <- min(sort(lt_weekly_means[row, col, ])[13:52], na.rm=TRUE) 
+      # c_d_min.2 <- min(sort(lt_weekly_means[row, col, ])[9:52], na.rm=TRUE) 
+      # c_d_min.1 <- min(sort(lt_weekly_means[row, col, ])[5:52], na.rm=TRUE) 
+      # 
+      # max_weekly_mean[[element]] <- c(lat[col], long[row], max, h_d_max.3, h_d_max.2, h_d_max.1)
+      # min_weekly_mean[[element]] <- c(lat[col], long[row],  min, c_d_min.3, c_d_min.2, c_d_min.1)
       
-      c_d_min.3 <- min(sort(lt_weekly_means[row, col, ])[13:52], na.rm=TRUE) 
-      c_d_min.2 <- min(sort(lt_weekly_means[row, col, ])[9:52], na.rm=TRUE) 
-      c_d_min.1 <- min(sort(lt_weekly_means[row, col, ])[5:52], na.rm=TRUE) 
-      
-      max_weekly_mean[[element]] <- c(lat[col], long[row], max, h_d_max.3, h_d_max.2, h_d_max.1)
-      min_weekly_mean[[element]] <- c(lat[col], long[row],  min, c_d_min.3, c_d_min.2, c_d_min.1)
+      max_weekly_mean[[element]] <- c(lat[col], long[row], max, h_d_max)
+      min_weekly_mean[[element]] <- c(lat[col], long[row],  min, c_d_min)
       
       element = element + 1
       col = col + 1
@@ -289,20 +426,53 @@ while (row < nrow(sst_first) + 1) {
 
 max_weekly_mean <- data.frame(do.call(rbind, max_weekly_mean), stringsAsFactors = FALSE) 
 colnames(max_weekly_mean) = c("latitude", "longitude", "seasonal_high_temp", 
-                              "hot_dormancy_3", "hot_dormancy_2", "hot_dormancy_1")
+                              "hot_dormancy_6mo")
 max_weekly_mean <- mutate(max_weekly_mean, longitude = ifelse(longitude < 180, longitude,
                                                               longitude - 360)) %>%
-  select(longitude, latitude, seasonal_high_temp, hot_dormancy_1, hot_dormancy_2, hot_dormancy_3)
+  select(longitude, latitude, seasonal_high_temp, hot_dormancy_6mo)
 
 min_weekly_mean <- data.frame(do.call(rbind, min_weekly_mean), stringsAsFactors = FALSE) 
 colnames(min_weekly_mean) = c("latitude", "longitude", "seasonal_low_temp",
-                              "cold_dormancy_3", "cold_dormancy_2", "cold_dormancy_1")
+                              "cold_dormancy_6mo")
 min_weekly_mean <- mutate(min_weekly_mean, longitude = ifelse(longitude < 180, longitude, 
                                                               longitude - 360)) %>%
-  select(longitude, latitude, seasonal_low_temp, cold_dormancy_1, cold_dormancy_2, cold_dormancy_3)
+  select(longitude, latitude, seasonal_low_temp, cold_dormancy_6mo)
   
 
 
 ## save these datasets as seasonal high and low temps
-write.csv(max_weekly_mean, "data-processed/marine_seasonal-max-temps.csv", row.names = FALSE)
-write.csv(min_weekly_mean, "data-processed/marine_seasonal-min-temps.csv", row.names = FALSE)
+write.csv(max_weekly_mean, "data-processed/marine_seasonal-max-temps_6mo.csv", row.names = FALSE)
+write.csv(min_weekly_mean, "data-processed/marine_seasonal-min-temps_6mo.csv", row.names = FALSE)
+
+
+
+## garbage
+## looking at dormancy max/min temps vs absolute max/min temps
+ggplot(final_max, aes(x = seasonal_high_temp, y = hot_dormancy_6mo)) + geom_point() + 
+  geom_abline(slope = 1, col = "red")
+
+ggplot(final_min, aes(x = seasonal_low_temp, y = cold_dormancy_6mo)) + geom_point() + 
+  geom_abline(slope = 1, col = "red")
+
+length(which(final_min$seasonal_low_temp >= final_min$cold_dormancy_6mo ))
+length(which(final_min$seasonal_low_temp >= final_min$cold_dormancy_6mo - 1))
+length(which(final_min$seasonal_low_temp >= final_min$cold_dormancy_6mo - 5))
+
+length(which(final_max$seasonal_high_temp == final_max$hot_dormancy_6mo))
+length(which(final_max$seasonal_high_temp <= final_max$hot_dormancy_6mo + 1))
+length(which(final_max$seasonal_high_temp <= final_max$hot_dormancy_6mo + 5))
+
+ggplot(max_weekly_mean, aes(x = seasonal_high_temp, y = hot_dormancy_6mo)) + geom_point() + 
+  geom_abline(slope = 1, col = "red")
+
+ggplot(min_weekly_mean, aes(x = seasonal_low_temp, y = cold_dormancy_6mo)) + geom_point() + 
+  geom_abline(slope = 1, col = "red")
+
+length(which(min_weekly_mean$seasonal_low_temp >= min_weekly_mean$cold_dormancy_6mo ))
+length(which(min_weekly_mean$seasonal_low_temp >= min_weekly_mean$cold_dormancy_6mo - 1))
+length(which(min_weekly_mean$seasonal_low_temp >= min_weekly_mean$cold_dormancy_6mo - 5))
+
+length(which(max_weekly_mean$seasonal_high_temp == max_weekly_mean$hot_dormancy_6mo))
+length(which(max_weekly_mean$seasonal_high_temp <= max_weekly_mean$hot_dormancy_6mo + 1))
+length(which(max_weekly_mean$seasonal_high_temp <= max_weekly_mean$hot_dormancy_6mo + 5))
+

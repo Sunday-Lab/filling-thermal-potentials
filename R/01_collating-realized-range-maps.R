@@ -132,6 +132,9 @@ st_crs(GBIF)
 realized_ranges <- rbind(IUCN, GBIF) ## okay, we have 524 ectotherm ranges 
 length(unique(realized_ranges$species)) ## 439 unique species 
 
+length(unique(IUCN$species)) ## 214
+length(unique(GBIF$species)) ## 310
+
 ## create sf that represents the equator (a line)
 equator <- st_linestring(rbind(c(-180, 0), c(180, 0)))
 plot(st_geometry(equator))
@@ -208,6 +211,7 @@ write.csv(thermal_limits_new, "data-processed/thermal-limits_ectotherms-with-ran
 
 ## look at species with ranges in IUCN and made by Greta
 ## all 85 are squamata 
+thermal_limits_new <- read.csv("data-processed/thermal-limits_ectotherms-with-ranges.csv")
 duplicated <- IUCN$species[which(IUCN$species %in% GBIF$species)]
 
 duplicate <- filter(realized_ranges, species == as.character(duplicated[1]))
@@ -268,14 +272,18 @@ ggplot(props, aes(fill = leftover_type, y = area, x=reorder(species, -area))) +
   geom_bar(position="stack", stat="identity") +
   coord_flip() +
   labs(y = "Area (km^2)", x = "Species", fill = "") +
-  scale_fill_manual(values = c("purple4", "forestgreen", "orange"), labels=c("GBIF range not in IUCN range","Overlap between ranges","IUCN range not in GBIF range"))
+  scale_fill_manual(values =  c("darkgoldenrod1", "azure4", "darkorange3"), 
+                    labels=c("GBIF range not in IUCN range",
+                             "Overlap between ranges",
+                             "IUCN range not in GBIF range")) +
+  theme(axis.text.y = element_text(size = 6))
 
-ggsave(device = "png", filename = "figures/IUCN-GBIF-range-overlap.png")
+ggsave(device = "png", filename = "figures/IUCN-GBIF-range-overlap.png", height = 6, width = 10)
 
 ## make plot to explain what overlaps mean:
-plot(IUCNrange, col = "orange")
-plot(GBIFrange, add = TRUE, col = "purple4")
-plot(overlap, add = TRUE, col = "forestgreen")
+plot(IUCNrange, col = "darkorange3")
+plot(GBIFrange, add = TRUE, col = "darkgoldenrod1")
+plot(overlap, add = TRUE, col = "azure4")
 plot(st_geometry(countries), add = TRUE)
 
 dev.copy(png, filename = "figures/IUCN-GBIF-range-overlap_example.png", width = 1000, height = 600);
