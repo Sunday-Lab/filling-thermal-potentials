@@ -14,102 +14,14 @@ select <- dplyr::select
 
 
 ####################################################################################
-#####                       SEASONAL TEMPERATURE RASTERS                      ######
+#####                       READ IN TEMPERATURE RASTERS                       ######
 ####################################################################################
-r <- raster(xmn=-180, xmx=180, ymn=-90, ymx=90, 
-            crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"),
-            res = 1)
-
-## read in seasonal high and low temp data:
-terr_seasonal_high <- read.csv("data-processed/terrestrial_seasonal-max-temps_6mo-dormancy.csv")
-terr_seasonal_low <- read.csv("data-processed/terrestrial_seasonal-min-temps_6mo-dormancy.csv")
-
-## rasterize:
-raster_terr_high <- rasterize(terr_seasonal_high[, 1:2], r, terr_seasonal_high[,3:4], fun=mean) 
-raster_terr_high[is.infinite(raster_terr_high)] <- NA
-names(raster_terr_high) <- c("seasonal_high_temp", "hot_dormancy_6mo")
-##plot(raster_terr_high[[1]], asp = 1)
-
-raster_terr_low <- rasterize(terr_seasonal_low[, 1:2], r, terr_seasonal_low[,3:4], fun=mean)
-raster_terr_low[is.infinite(raster_terr_low)] <- NA
-names(raster_terr_low) <- c("seasonal_low_temp",  "cold_dormancy_6mo")
-##plot(raster_terr_low, asp = 1)
-
-## write out mask layer for use in restricting realized ranges:
-raster_terr_mask <- raster_terr_low
-raster_terr_mask[!is.na(raster_terr_mask)] = 1
-##plot(raster_terr_mask, asp = 1)
-writeRaster(raster_terr_mask, "./data-processed/raster_terr_mask.nc", overwrite = TRUE)
-
-## read in seasonal high and low temp data:
-marine_seasonal_high <- read.csv("data-processed/marine_seasonal-max-temps_6mo.csv") 
-marine_seasonal_low <- read.csv("data-processed/marine_seasonal-min-temps_6mo.csv")
-
-## rasterize:
-raster_marine_high <- rasterize(marine_seasonal_high[, 1:2], r, marine_seasonal_high[,3:4], fun=mean)
-raster_marine_high[is.infinite(raster_marine_high)] <- NA
-names(raster_marine_high) <-  c("seasonal_high_temp", "hot_dormancy_6mo")
-##plot(raster_marine_high[[2]], asp = 1)
-
-raster_marine_low <- rasterize(marine_seasonal_low[, 1:2], r, marine_seasonal_low[,3:4], fun=mean)
-raster_marine_low[is.infinite(raster_marine_low)] <- NA
-names(raster_marine_low) <-  c("seasonal_low_temp",  "cold_dormancy_6mo")
-##plot(raster_marine_low, asp = 1)
-
-## write out mask layer for use in restricting realized ranges:
-raster_marine_mask <- raster_marine_low
-raster_marine_mask[!is.na(raster_marine_mask)] = 1
-##plot(raster_marine_mask, asp = 1)
-writeRaster(raster_marine_mask[[1]], "./data-processed/raster_marine_mask.nc", overwrite = TRUE)
-
-
-## create intertidal temperature data:
-## create polygon representing the edge of land:
-land <- raster_terr_high 
-land[is.infinite(land)] = NA 
-land[land > 0 | land < 0] <- 1
-
-polygon <- land %>%
-  rasterToPolygons(., dissolve = TRUE) %>% 
-  st_as_sf()
-smooth <- smoothr::smooth(polygon, method = "ksmooth", smoothness = 10) 
-st_crs(smooth) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0")
-## plot(st_geometry(smooth), axes = TRUE) 
-
-## create buffer around intertidal area into sea and onto land
-buffer_sea <- st_buffer(smooth, dist = 2)
-buffer_land <- st_buffer(smooth, dist = -1)
-##plot(st_geometry(buffer_sea))
-##plot(st_geometry(buffer_land))
-
-## subset temperature data to include only temperatures in buffer 
-intertidal_sea_high <- raster_marine_high %>%
-  mask(., buffer_sea) 
-
-intertidal_land_high <- raster_terr_high %>%
-  mask(., buffer_land, inverse = TRUE)
-
-intertidal_sea_low <- raster_marine_low %>%
-  mask(., buffer_sea) 
-
-intertidal_land_low <- raster_terr_low %>%
-  mask(., buffer_land, inverse = TRUE)
-
-## combine land and sea temperatures, giving priority to sea temperatures 
-raster_intertidal_high <- merge(intertidal_sea_high, intertidal_land_high)
-raster_intertidal_low <- merge(intertidal_sea_low, intertidal_land_low)
-names(raster_intertidal_high) <- c("seasonal_high_temp", "hot_dormancy_6mo")
-names(raster_intertidal_low) <-  c("seasonal_low_temp",  "cold_dormancy_6mo")
-##plot(raster_intertidal_high[[2]])
-##plot(raster_intertidal_low)
-
-
-## write out mask layer for use in restricting realized ranges:
-raster_intertidal_mask <- raster_intertidal_low
-raster_intertidal_mask[!is.na(raster_intertidal_mask)] = 1
-##plot(raster_intertidal_mask, asp = 1)
-writeRaster(raster_intertidal_mask[[1]], "./data-processed/raster_intertidal_mask.nc", overwrite = TRUE)
-
+raster_terr_low <- raster("./data-processed/raster_terr_low.nc")
+raster_terr_high <- raster("./data-processed/raster_terr_high.nc")
+raster_marine_low <- raster("./data-processed/raster_marine_low.nc")
+raster_marine_high <- raster("./data-processed/raster_marine_high.nc")
+raster_intertidal_low <- raster("./data-processed/raster_intertidal_low.nc")
+raster_intertidal_high <- raster("./data-processed/raster_intertidal_high.nc")
 
 ####################################################################################
 #####                   RASTERIZE REALIZED RANGES                             ######
