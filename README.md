@@ -10,6 +10,6 @@ Data guide:
 
 - [Most up-to-date version of ectotherm traits](https://github.com/Sunday-Lab/filling-thermal-potentials/blob/master/data-processed/globtherm_traits_collated_180617_ectotherms-with-limits_filled.csv)
 
-- [Realized range shapefiles for ectotherms](https://github.com/Sunday-Lab/filling-thermal-potentials/blob/master/data-processed/realized-ranges_unsplit.shp) are the realized range shapefiles for ectotherms
+- [Realized range shapefiles for ectotherms](https://github.com/Sunday-Lab/filling-thermal-potentials/blob/master/data-processed/realized-ranges_unsplit.shp)
 
 - Rasterized [potential ranges](https://github.com/Sunday-Lab/filling-thermal-potentials/blob/master/data-processed/potential_ranges_notcutatequator_dormancy.rds) and [realized ranges](https://github.com/Sunday-Lab/filling-thermal-potentials/blob/master/data-processed/rasterized_rrs.rds)
