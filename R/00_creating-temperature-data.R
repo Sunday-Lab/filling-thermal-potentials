@@ -467,14 +467,17 @@ raster_terr_low[is.infinite(raster_terr_low)] <- NA
 names(raster_terr_low) <- c("seasonal_low_temp",  "cold_dormancy_6mo")
 ##plot(raster_terr_low, asp = 1)
 ## write out:
-writeRaster(raster_terr_low, "./data-processed/raster_terr_low.nc", overwrite = TRUE)
-writeRaster(raster_terr_high, "./data-processed/raster_terr_high.nc", overwrite = TRUE)
+writeRaster(raster_terr_low, "./data-processed/raster_terr_low.grd", 
+            overwrite = TRUE, format = "raster")
+writeRaster(raster_terr_high, "./data-processed/raster_terr_high.grd", 
+            overwrite = TRUE, format = "raster")
 
 ## write out mask layer for use in restricting realized ranges:
 raster_terr_mask <- raster_terr_low
 raster_terr_mask[!is.na(raster_terr_mask)] = 1
 ##plot(raster_terr_mask, asp = 1)
-writeRaster(raster_terr_mask, "./data-processed/raster_terr_mask.nc", overwrite = TRUE)
+writeRaster(raster_terr_mask, "./data-processed/raster_terr_mask.grd", 
+            overwrite = TRUE, format = "raster")
 
 ## read in seasonal high and low temp data:
 marine_seasonal_high <- read.csv("data-processed/marine_seasonal-max-temps_6mo.csv") 
@@ -491,14 +494,17 @@ raster_marine_low[is.infinite(raster_marine_low)] <- NA
 names(raster_marine_low) <-  c("seasonal_low_temp",  "cold_dormancy_6mo")
 ##plot(raster_marine_low, asp = 1)
 ## write out:
-writeRaster(raster_marine_low, "./data-processed/raster_marine_low.nc", overwrite = TRUE)
-writeRaster(raster_marine_high, "./data-processed/raster_marine_high.nc", overwrite = TRUE)
+writeRaster(raster_marine_low, "./data-processed/raster_marine_low.grd", 
+            overwrite = TRUE, format = "raster")
+writeRaster(raster_marine_high, "./data-processed/raster_marine_high.grd", 
+            overwrite = TRUE, format = "raster")
 
 ## write out mask layer for use in restricting realized ranges:
 raster_marine_mask <- raster_marine_low
 raster_marine_mask[!is.na(raster_marine_mask)] = 1
 ##plot(raster_marine_mask, asp = 1)
-writeRaster(raster_marine_mask[[1]], "./data-processed/raster_marine_mask.nc", overwrite = TRUE)
+writeRaster(raster_marine_mask[[1]], "./data-processed/raster_marine_mask.grd", 
+            overwrite = TRUE, format = "raster")
 
 
 ## create intertidal temperature data:
@@ -541,15 +547,18 @@ names(raster_intertidal_low) <-  c("seasonal_low_temp",  "cold_dormancy_6mo")
 ##plot(raster_intertidal_high[[2]])
 ##plot(raster_intertidal_low)
 ## write out:
-writeRaster(raster_intertidal_low, "./data-processed/raster_intertidal_low.nc", overwrite = TRUE)
-writeRaster(raster_intertidal_high, "./data-processed/raster_intertidal_high.nc", overwrite = TRUE)
+writeRaster(raster_intertidal_low, "./data-processed/raster_intertidal_low.grd", 
+            overwrite = TRUE, format = "raster")
+writeRaster(raster_intertidal_high, "./data-processed/raster_intertidal_high.grd", 
+            overwrite = TRUE, format = "raster")
 
 
 ## write out mask layer for use in restricting realized ranges:
 raster_intertidal_mask <- raster_intertidal_low
 raster_intertidal_mask[!is.na(raster_intertidal_mask)] = 1
 ##plot(raster_intertidal_mask, asp = 1)
-writeRaster(raster_intertidal_mask[[1]], "./data-processed/raster_intertidal_mask.nc", overwrite = TRUE)
+writeRaster(raster_intertidal_mask[[1]], "./data-processed/raster_intertidal_mask.grd", 
+            overwrite = TRUE, format = "raster")
 
 
 #############################################################################
@@ -578,7 +587,7 @@ elev_dif <- aggregate(elev_dif, fact = 12, fun = mean, na.rm = TRUE)
 ##plot(elev_dif, asp = 1)
 
 ## crop raster to include only terrestrial areas using the terrestrial mask
-t_mask <- raster("./data-processed/raster_terr_mask.nc")
+t_mask <- raster("./data-processed/raster_terr_mask.grd")
 elev_dif <- extend(elev_dif, t_mask) ## extend to same extent as temperature data 
 elev_dif <- mask(elev_dif, t_mask) ## masks temps outside of the terrestrial mask 
 ##plot(elev_dif, asp = 1)
@@ -626,6 +635,22 @@ terr_min <- terr_min %>%
 ## write to file
 write.csv(terr_min, "data-processed/terrestrial_seasonal-min-temps_dormancy-and-elev.csv",
           row.names = FALSE)
+
+## add layer to terrestrial low temperature raster
+raster_terr_low <- rasterize(terr_min[, 1:2], r, terr_min[,3:5], fun=mean)
+#plot(r_elev, asp = 1)
+raster_terr_low[is.infinite(raster_terr_low)] <- NA
+
+## write to raster file
+writeRaster(raster_terr_low, "./data-processed/raster_terr_low.grd", 
+            overwrite = TRUE, format = "raster")
+
+
+
+
+
+
+
 
 ##############################################
 #####               GARBAGE             ######
