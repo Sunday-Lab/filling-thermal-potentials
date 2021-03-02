@@ -521,7 +521,7 @@ st_crs(smooth) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84
 ## plot(st_geometry(smooth), axes = TRUE) 
 
 ## create buffer around intertidal area into sea and onto land
-buffer_sea <- st_buffer(smooth, dist = 2)
+buffer_sea <- st_buffer(smooth, dist = 1)
 buffer_land <- st_buffer(smooth, dist = -1)
 ##plot(st_geometry(buffer_sea))
 ##plot(st_geometry(buffer_land))
